@@ -80,6 +80,9 @@ test('messages and ics', () => {
   assert.equal(C.icsFor(multi).match(/BEGIN:VEVENT/g).length, 2);
   const w = C.toWire(multi); assert.deepEqual(w.f, [19, 26]);
   assert.deepEqual(C.fromWire({ ...w, f: 19 }).finals, ['2026-11-20']); // first-release links
+  const first = C.draftMessage({ ...plan, step: 1, b: undefined }, 'L');
+  assert.match(first, /\nL\nIt's locked with a passphrase, which I'll send you in a separate message\.$/);
+  assert.doesNotMatch(first, /agreed/);
   assert.equal(C.turnAfter(1), 'b'); assert.equal(C.turnAfter(2), 'a'); assert.equal(C.turnAfter(4), null);
 });
 
