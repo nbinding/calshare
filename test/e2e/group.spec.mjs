@@ -1,6 +1,6 @@
 // Group plans: one invite, several guests (two with the same name), the organiser locks in the day.
 import { test, expect } from '@playwright/test';
-import { freshPage, expectNoSidewaysScroll, day } from './helpers.mjs';
+import { freshPage, expectNoSidewaysScroll, day, startPlan, createLink } from './helpers.mjs';
 
 async function person(browser, info) {
   const page = await (await browser.newContext({ ...info.project.use })).newPage();
@@ -21,14 +21,9 @@ async function reply(page, invite, pass, name, days) {
 test('group: replies are kept apart by hidden id and the organiser locks in a day', async ({ browser }, info) => {
   const org = await person(browser, info), sam1 = await person(browser, info), sam2 = await person(browser, info), jo = await person(browser, info);
 
-  await org.page.goto('/');
-  await org.page.getByRole('button', { name: 'Start a plan', exact: true }).click();
-  await org.page.fill('[data-input=a-name]', 'Nat');
-  await org.page.fill('[data-input=title]', 'Hike');
-  await org.page.getByRole('radio', { name: 'A group' }).click();
+  await startPlan(org.page);
   for (const d of ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-25']) await org.page.click(day(d));
-  const pass = await org.page.inputValue('[data-input=pass]');
-  await org.page.click('[data-act=send]');
+  const pass = await createLink(org.page, { name: 'Nat', title: 'Hike', group: true });
   await expect(org.page.locator('#share-h')).toHaveText("Send it to everyone you're inviting");
   await expect(org.page.locator('#msg')).toHaveValue(/^Hi all! Can we find a day for Hike\?/);
   const invite = org.page.url();
@@ -87,6 +82,7 @@ test('group: replies are kept apart by hidden id and the organiser locks in a da
 
   // The organiser can change the locked-in days later.
   await org.page.goto('/');
+  await org.page.getByRole('link', { name: 'Your plans' }).first().click();
   await expect(org.page.locator('.plan-row')).toContainText('Settled');
   await org.page.locator('.plan-row a').click();
   await org.page.getByRole('button', { name: 'Change the final days' }).click();
