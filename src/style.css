@@ -326,3 +326,15 @@ html[data-spacing="true"] .dt-chips button { letter-spacing: 0 !important; }
 .hint-pic.cycle { flex-wrap: nowrap; gap: 2px; }
 .hint-pic.cycle .mini-cell { width: min(30px, 8vw); height: min(30px, 8vw); font-size: min(.8125rem, 3.4vw); }
 .hint-pic.cycle .mini-arrow { font-size: .75rem; }
+
+/* Groups */
+.reply-code { margin: 0 0 12px; padding: 10px 12px; border: 1px dashed var(--muted-ink); border-radius: 8px; background: var(--field); font-size: .9375rem; }
+.reply-code strong { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1.05rem; letter-spacing: .08em; }
+.reply-code .small { display: block; margin-top: 4px; }
+.replies { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 6px; }
+.replies li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
+.replies small { color: var(--muted-ink); font-size: .8125rem; white-space: nowrap; }
+.day-list small.who { font-size: .8125rem; }
+.how-group { margin-top: 12px; }
+.edit-btn { margin-top: 8px; }
+.edit-note { margin: 6px 0 4px; }

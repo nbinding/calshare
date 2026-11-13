@@ -3,16 +3,24 @@ import {
   FREE, TAGS, MAX_MONTHS, cycle, setTime, meet, overlap, isFree, tagsOf, tagWords,
   todayIso, monthOf, addMonths, rangeMonths, rangeDays, daysInMonth, weekdayIndex, parseIso,
   toWire, fromWire, turnAfter, isStale, formatDay, formatMonth, draftMessage, finalSummary, icsFor,
+  decodeDays, encodeDays, shortCode, labelPeople, groupDays, dayNote,
 } from './core.js';
 
 // ---------- Local storage (this device only) ----------
 const STORE = 'calshare-v1';
 function loadStore() { try { return JSON.parse(localStorage.getItem(STORE)) || { plans: {} }; } catch { return { plans: {} }; } }
 function saveStore(s) { try { localStorage.setItem(STORE, JSON.stringify(s)); } catch { /* private mode: carry on without saving */ } }
-function remember(plan, role, pass, hash) {
+// A record per plan: role, passphrase, latest link and plan, plus for groups the organiser's
+// invite link and every reply (keyed by the guest's hidden id), and a guest's own id.
+function remember(plan, role, pass, hash, extra = {}) {
   const s = loadStore();
-  s.plans[plan.id] = { role, pass, hash, wire: toWire(plan), updated: Date.now() };
+  s.plans[plan.id] = { ...s.plans[plan.id], role, pass, hash, wire: toWire(plan), updated: Date.now(), ...extra };
   saveStore(s);
+}
+function repliesOf(rec, plan) {
+  return Object.entries(rec?.replies || {}).map(([id, x]) => {
+    try { return { id, name: x.n, v: x.v || 0, days: decodeDays(x.d, plan.start, plan.count) }; } catch { return null; }
+  }).filter(Boolean);
 }
 function forget(id) { const s = loadStore(); delete s.plans[id]; saveStore(s); }
 function recordFor(id) { return loadStore().plans[id]; }
@@ -20,8 +28,9 @@ function recordFor(id) { return loadStore().plans[id]; }
 // ---------- Helpers ----------
 const $app = document.getElementById('app');
 const h = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const plural = (n, w) => `${n} ${n === 1 ? w : w.endsWith('ch') ? w + 'es' : w + 's'}`;
-const randomId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), b => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[b & 63]).join('');
+const IRREGULAR = { person: 'people', reply: 'replies' };
+const plural = (n, w) => `${n} ${n === 1 ? w : IRREGULAR[w] || (w.endsWith('ch') ? w + 'es' : w + 's')}`;
+const randomId = (n = 6) => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[b & 63]).join('');
 const baseUrl = () => location.href.split('#')[0];
 const clone = p => fromWire(JSON.parse(JSON.stringify(toWire(p))));
 const futureDays = (days, today) => Object.keys(days).filter(d => d >= today).sort();
@@ -42,7 +51,8 @@ const icon = {
 
 // ---------- State ----------
 const S = {
-  view: 'home',      // home | unlock | compose | respond | pick | confirm | waiting | done
+  view: 'home',      // home | unlock | compose | respond | pick | confirm | collect | waiting | done
+  editing: false,    // re-sending after a link was already shared
   plan: null, role: null, pass: '', hash: '',
   monthIdx: 0,
   sent: null,        // { link, text, step } once a link has been made in this view
@@ -109,7 +119,8 @@ function header() {
 
 function stepper(plan, step) {
   const A = nameOf(plan, 'a', 'Organiser'), B = nameOf(plan, 'b', 'Guest');
-  const labels = [`${A} shares`, `${B} adds days`, `${A} picks`, `${B} confirms`];
+  const labels = plan.group ? [`${A} invites`, 'Everyone adds days', `${A} locks it in`] : [`${A} shares`, `${B} adds days`, `${A} picks`, `${B} confirms`];
+  if (plan.group) step = { 1: 1, 2: 2, 3: 3, 4: 3, 5: 4 }[step];
   return `<ol class="stepper" aria-label="Progress">${labels.map((l, i) => {
     const n = i + 1, cls = n < step ? 'done' : n === step ? 'current' : '';
     return `<li class="${cls}" ${n === step ? 'aria-current="step"' : ''}><span class="dot">${n < step ? '✓' : n}</span><span class="label">${h(l)}</span></li>`;
@@ -128,7 +139,7 @@ function banners() {
 }
 
 // Calendar. mode: 'edit' (paint my days), 'pick' (choose among overlaps), 'view'
-function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 'edit', readonly = false }) {
+function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 'edit', readonly = false, counts = null }) {
   const p = S.plan, months = rangeMonths(p.start, p.count), today = todayIso();
   const idx = Math.min(S.monthIdx, months.length - 1), mo = months[idx];
   const count = (m, src) => Object.keys(src).filter(d => monthOf(d) === m).length;
@@ -159,12 +170,12 @@ function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 
       tagMask = ok || 0;
       if (ok) cls.push('allowed'); else disabled = true;
       if (picked.includes(iso)) { cls.push('mine'); pressed = true; } else if (ok) pressed = false;
-      if (ok) label += `, both free ${tagWords(ok)}`;
+      if (ok) label += counts ? `, ${counts[iso].replace('/', ' of ')} can make it, ${tagWords(ok)}` : `, both free ${tagWords(ok)}`;
       if (mode === 'view') disabled = true;
     }
     if (past) cls.push('past');
     if (iso === today) cls.push('today');
-    const tags = tagsOf(tagMask) ? TAGS.filter(x => tagMask & x.bit).map(x => x.label[0]).join('') : '';
+    const tags = counts?.[iso] || (tagsOf(tagMask) ? TAGS.filter(x => tagMask & x.bit).map(x => x.label[0]).join('') : '');
     cells.push(`<button class="${cls.join(' ')}" data-act="day" data-day="${iso}" data-focus="day-${iso}" ${disabled ? 'disabled' : ''} ${pressed != null ? `aria-pressed="${pressed}"` : ''} aria-label="${h(label)}"><span class="wd" aria-hidden="true">${iso === today ? 'Today' : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekdayIndex(iso)]}</span><span class="num">${d}</span>${tags ? `<span class="tags">${tags}</span>` : ''}</button>`);
   }
   return `<div class="calendar">
@@ -251,11 +262,12 @@ function sharePanel() {
   const { link, text, step } = S.sent;
   const p = S.plan, other = S.role === 'a' ? nameOf(p, 'b', 'them') : nameOf(p, 'a', 'them');
   const canShare = typeof navigator.share === 'function';
-  const title = step === 4 ? 'Send the confirmation' : `Send it to ${h(other)}`;
+  const title = step === 4 ? (p.group ? 'Send it to everyone' : 'Send the confirmation') : p.group && step === 1 ? 'Send it to everyone you\'re inviting' : `Send it to ${h(other)}`;
   const long = link.length > 1800 ? `<p class="small warn">This link is ${link.length} characters long. Most apps cope, but if it arrives broken, mark fewer days or months.</p>` : '';
   return `<section class="card share" aria-labelledby="share-h">
     <h2 id="share-h">${title}</h2>
-    <p class="small">Paste this into any chat app. You can edit the words first.</p>
+    <p class="small">${p.group && step === 1 ? 'Send the same link to each person, or paste it into a group chat. Everyone replies to you separately.' : 'Paste this into any chat app. You can edit the words first.'}</p>
+    ${S.sent.code ? `<p class="reply-code">Your reply code: <strong>${h(S.sent.code)}</strong> <span class="small">If someone else in the group has your name, this tells ${h(nameOf(p, 'a', 'the organiser'))} which reply is yours.</span></p>` : ''}
     <label class="sr-only" for="msg">Message</label>
     <textarea id="msg" rows="6" data-input="message">${h(text)}</textarea>
     <div class="actions">
@@ -277,15 +289,17 @@ function viewHome() {
   const rows = plans.map(([id, r]) => {
     let p; try { p = fromWire(r.wire); } catch { return ''; }
     const A = nameOf(p, 'a', 'Organiser'), B = nameOf(p, 'b', 'your guest');
-    const me = r.role, turn = turnAfter(p.step);
+    const me = r.role, turn = turnAfter(p.step), n = Object.keys(r.replies || {}).length;
     const status = p.step === 4 ? `Settled: ${p.finals.map(d => formatDay(d, { weekday: 'short', day: 'numeric', month: 'short' })).join(', ')}`
+      : p.group && me === 'a' ? (n ? `${plural(n, 'reply')} so far` : 'Waiting for replies')
       : turn === me ? 'Your turn' : `Waiting for ${me === 'a' ? B : A}`;
-    return `<li class="plan-row"><a href="#${h(r.hash)}"><strong>${h(p.title || `${A}${p.b ? ' & ' + nameOf(p, 'b', '') : ''}`)}</strong><small>${h(status)}</small></a>
+    const name = p.title || (p.group ? `${A}'s group plan` : `${A}${p.b ? ' & ' + nameOf(p, 'b', '') : ''}`);
+    return `<li class="plan-row"><a href="#${h(r.hash)}"><strong>${h(name)}</strong><small>${h(status)}</small></a>
       <button class="text-button" data-act="forget" data-id="${h(id)}" aria-label="Forget this plan">Forget</button></li>`;
   }).join('');
   return `<main class="page home">
     <p class="eyebrow">Private, day-level scheduling</p>
-    <h1>Find a day that <em>works for both of you.</em></h1>
+    <h1>Find a day that <em>works for everyone.</em></h1>
     <p class="lead">Mark the days you're free, send a link, and settle on a date in four quick messages. No accounts, no server, nothing to install.</p>
     <button class="primary" data-act="new">${icon.cal}Start a plan</button>
     ${rows ? `<div class="section-rule"><span>Your plans</span></div><ul class="plans">${rows}</ul>` : ''}
@@ -296,6 +310,7 @@ function viewHome() {
       <li><span class="num">3</span><div><h2>You pick</h2><p>Only the days you're both free are shown. Choose one or a few.</p></div></li>
       <li><span class="num">4</span><div><h2>They confirm</h2><p>They lock in the final day, or several, and get a ready-made message to send.</p></div></li>
     </ol>
+    <p class="small how-group"><strong>Planning with a group?</strong> Choose "A group" when you start. Everyone gets the same link, sends their days back to you, and you lock in the day that suits the most people.</p>
     <p class="privacy">${icon.lock}<span>Your days are encrypted in your browser and travel after the <code>#</code> in the link, which is never sent to any server. Plans you open are kept on this device only, until you forget them.</span></p>
   </main>`;
 }
@@ -320,16 +335,20 @@ function viewCompose() {
   const p = S.plan, mine = p.a.days, n = futureDays(mine, todayIso()).length;
   const theirs = p.b?.days || {};
   const startOpts = [0, 1, 2].map(i => addMonths(monthOf(todayIso()), i));
-  if (S.sent) return `<main class="page">${stepper(p, 1)}${banners()}<p class="eyebrow">Step 1 of 4</p><h1>Your link is <em>ready.</em></h1>${sharePanel()}
+  const steps = p.group ? 3 : 4;
+  if (S.sent) return `<main class="page">${stepper(p, 1)}${banners()}<p class="eyebrow">Step 1 of ${steps}</p><h1>Your ${S.editing ? 'new ' : ''}link is <em>ready.</em></h1>${sharePanel()}
     <button class="text-button" data-act="unsend">${icon.left}Change my days</button></main>`;
   return `<main class="page">
     ${stepper(p, 1)}${banners()}
-    <p class="eyebrow">Step 1 of 4</p>
+    <p class="eyebrow">Step 1 of ${steps}${S.editing ? ' · Editing' : ''}</p>
     <h1>When are <em>you free?</em></h1>
     <section class="card">
       <label class="field"><span>Your name</span><input data-input="a-name" value="${h(p.a.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Sam"></label>
       <label class="field"><span>What's it for? <small>Optional</small></span><input data-input="title" value="${h(p.title)}" maxlength="80" placeholder="e.g. Dinner, a call, the hike"></label>
-      ${p.b ? '' : `<div class="field-row">
+      ${p.b || S.editing ? '' : `<div class="field"><span id="who-l">Who's it for?</span><div class="segmented" role="radiogroup" aria-labelledby="who-l">
+        <button role="radio" aria-checked="${!p.group}" data-act="group" data-on="0">One person</button><button role="radio" aria-checked="${!!p.group}" data-act="group" data-on="1">A group</button></div>
+        ${p.group ? '<p class="small">Everyone gets the same link and sends their days back to you. You then lock in the day that suits the most people.</p>' : ''}</div>`}
+      ${p.b || S.editing ? '' : `<div class="field-row">
         <label class="field"><span>Starting</span><select data-input="start">${startOpts.map(m => `<option value="${m}" ${m === p.start ? 'selected' : ''}>${h(formatMonth(m))}</option>`).join('')}</select></label>
         <div class="field"><span id="span-l">Months</span><div class="segmented" role="radiogroup" aria-labelledby="span-l">${[1, 2, 3].slice(0, MAX_MONTHS).map(c => `<button role="radio" aria-checked="${p.count === c}" data-act="count" data-c="${c}">${c}</button>`).join('')}</div></div>
       </div>`}
@@ -344,10 +363,10 @@ function viewCompose() {
     </section>
     <section class="card">
       <h2>Lock it with a passphrase</h2>
-      <p class="small">They'll need this to open the link. Use the suggestion or type your own.</p>
+      <p class="small">${S.editing ? 'Keep the same passphrase so they don\'t need a new one.' : `${p.group ? 'Everyone' : 'They'}'ll need this to open the link. Use the suggestion or type your own.`}</p>
       <div class="pass-row"><input aria-label="Passphrase" data-input="pass" value="${h(S.pass)}" autocapitalize="none" spellcheck="false"><button class="icon-button" data-act="reroll" aria-label="Suggest new words">${icon.dice}</button></div>
       ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
-      <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.lock}${S.busy ? 'Locking…' : 'Create my link'}</button>
+      <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.lock}${S.busy ? 'Locking…' : S.editing ? 'Create my new link' : 'Create my link'}</button>
     </section>
   </main>`;
 }
@@ -356,13 +375,14 @@ function viewRespond() {
   const p = S.plan, A = nameOf(p, 'a', 'They'), today = todayIso();
   const theirs = futureDays(p.a.days, today);
   const both = futureDays(overlap(p.a.days, p.b.days), today).length;
-  if (S.sent) return `<main class="page">${stepper(p, 2)}${banners()}<p class="eyebrow">Step 2 of 4</p><h1>Send it <em>back.</em></h1>${sharePanel()}
+  const steps = p.group ? 3 : 4;
+  if (S.sent) return `<main class="page">${stepper(p, 2)}${banners()}<p class="eyebrow">Step 2 of ${steps}</p><h1>Send it <em>back.</em></h1>${sharePanel()}
     <button class="text-button" data-act="unsend">${icon.left}Change my days</button></main>`;
   return `<main class="page">
     ${stepper(p, 2)}${banners()}
-    <p class="eyebrow">Step 2 of 4 · Your turn</p>
+    <p class="eyebrow">Step 2 of ${steps} · ${S.editing ? 'Editing' : 'Your turn'}</p>
     <h1>${h(A)} is free on <em>${plural(theirs.length, 'day')}.</em></h1>
-    <p class="lead">${p.title ? `For <strong>${h(p.title)}</strong>. ` : ''}Their days have a dashed outline. Mark the days you're free too, and the ones you share are ringed.</p>
+    <p class="lead">${p.title ? `For <strong>${h(p.title)}</strong>. ` : ''}${p.group ? `${h(A)} has invited a few people. Only ${h(A)} sees your reply. ` : ''}Their days have a dashed outline. Mark the days you're free too, and the ones you share are ringed.</p>
     <section class="card"><label class="field"><span>Your name</span><input data-input="b-name" value="${h(p.b.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Alex"></label></section>
     <section class="card">
       <h2>Your free days <span class="count">${both ? `${plural(both, 'match')}` : 'No matches yet'}</span></h2>
@@ -373,7 +393,7 @@ function viewRespond() {
       ${dayTimes(p.b.days, p.a.days, A)}
     </section>
     ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
-    <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.share}${S.busy ? 'Locking…' : `Send my days to ${h(A)}`}</button>
+    <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.share}${S.busy ? 'Locking…' : `Send my ${S.editing ? 'new ' : ''}days to ${h(A)}`}</button>
   </main>`;
 }
 
@@ -423,13 +443,52 @@ function viewConfirm() {
   </main>`;
 }
 
+// Organiser's view of a group plan: every reply so far, and how many can make each day.
+function viewCollect() {
+  const p = S.plan, today = todayIso(), people = S.people || [], labels = labelPeople(people);
+  const all = groupDays(p.a.days, people);
+  const days = Object.fromEntries(Object.entries(all).filter(([d]) => d >= today));
+  const counts = Object.fromEntries(Object.entries(days).map(([d, g]) => [d, `${g.free.length + 1}/${people.length + 1}`]));
+  const n = Object.keys(days).length, everyone = Object.keys(days).filter(d => days[d].free.length === people.length);
+  if (S.sent) return `<main class="page">${stepper(p, 5)}${banners()}<p class="eyebrow">All done</p><h1>It's <em>settled.</em></h1>${finalCard()}${sharePanel()}</main>`;
+  const replies = `<section class="card"><h2>Replies <span class="count">${plural(people.length, 'person')}</span></h2>
+    ${people.length ? `<ul class="replies">${people.map(x => `<li><strong>${h(labels[x.id])}</strong><small>${plural(futureDays(x.days, today).length, 'day')} free</small></li>`).join('')}</ul>` : '<p class="small">No replies yet. When someone sends their link back, open it and their days appear here.</p>'}
+    ${S.invite ? `<button class="text-button" data-act="show-invite">${icon.share}Send the invite to more people</button>` : ''}</section>`;
+  const head = `${stepper(p, 3)}${banners()}<p class="eyebrow">Step 3 of 3 · ${S.editing ? 'Editing' : 'Your turn'}</p>`;
+  if (!n) return `<main class="page">${head}
+    <h1>${people.length ? `No days <em>that work yet.</em>` : `Waiting for <em>replies.</em>`}</h1>
+    <p class="lead">${people.length ? 'Nobody who replied can make any of your days. You can add more days and send everyone a new link.' : 'Open each reply link as it arrives. You can lock in a day once people have replied.'}</p>
+    ${replies}${people.length ? `<button class="primary wide" data-act="revise">${icon.cal}Add more days</button>` : ''}</main>`;
+  const list = `<ul class="day-list">${Object.keys(days).sort().map(iso => {
+    const on = p.picks.includes(iso), g = days[iso];
+    return `<li><label class="choice ${on ? 'selected' : ''}"><input type="checkbox" data-act="toggle-pick" data-day="${iso}" ${on ? 'checked' : ''}><span><strong>${h(formatDay(iso))}</strong>
+      <small>${g.free.length + 1} of ${people.length + 1} can make it${tagsOf(g.mask) ? ` · ${h(tagWords(g.mask))}` : ''}</small>
+      <small class="who">${h([nameOf(p, 'a', 'You') + ' (you)', ...g.free.map(id => labels[id])].join(', '))}</small></span></label></li>`;
+  }).join('')}</ul>`;
+  return `<main class="page">${head}
+    <h1>${plural(people.length, 'person')} ${people.length === 1 ? 'has' : 'have'} <em>replied.</em></h1>
+    <p class="lead">Numbers show how many can make each day, including you. Lock in one day or several. More replies can still come in: open them and this updates.</p>
+    ${replies}
+    <section class="card">
+      ${calendar({ allowed: Object.fromEntries(Object.entries(days).map(([d, g]) => [d, g.mask])), picked: p.picks, mode: 'pick', counts })}
+      <div class="quick">${everyone.length ? `<button class="text-button" data-act="pick-everyone">Days everyone can do (${everyone.length})</button>` : ''}<button class="text-button" data-act="pick-none">Clear</button></div>
+    </section>
+    <section class="card"><h2>Days that work <span class="count">${p.picks.length} picked</span></h2>${list}</section>
+    ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
+    <button class="primary wide" data-act="send" ${S.busy || !p.picks.length ? 'disabled' : ''}>${icon.cal}${S.busy ? 'Locking…' : p.picks.length > 1 ? `Lock in ${p.picks.length} days` : 'Lock in this day'}</button>
+    <button class="text-button" data-act="revise">Change my free days instead</button>
+  </main>`;
+}
+
 function finalCard() {
   const p = S.plan, finals = p.finals || [];
-  const who = [p.a.name, p.b?.name].filter(Boolean).join(' & ');
+  const people = p.group ? (p.people || []) : [], labels = labelPeople(people);
+  const who = p.group ? `${plural(people.length + 1, 'person')}` : [p.a.name, p.b?.name].filter(Boolean).join(' & ');
   const rows = finals.map(iso => {
-    const mask = meet(p.a.days[iso] || 0, p.b?.days[iso] || 0), dt = parseIso(iso), tw = tagWords(mask);
+    const dt = parseIso(iso), note = dayNote(p, iso) || 'any time';
+    const going = p.group ? [p.a.name, ...(groupDays({ [iso]: p.a.days[iso] || FREE }, people)[iso]?.free || []).map(id => labels[id])].filter(Boolean) : [];
     return `<li><div class="tear"><span>${h(dt.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }))}</span><strong>${dt.getUTCDate()}</strong></div>
-      <div><h2>${h(formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2><p class="small">${h(tw[0].toUpperCase() + tw.slice(1))}</p></div></li>`;
+      <div><h2>${h(formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2><p class="small">${h(note[0].toUpperCase() + note.slice(1))}</p>${going.length ? `<p class="small">${h(going.join(', '))}</p>` : ''}</div></li>`;
   }).join('');
   return `<div class="final-card"><p class="eyebrow">${h(p.title || 'Meeting')}${finals.length > 1 ? ` · ${finals.length} days` : ''}${who ? ` · ${h(who)}` : ''}</p><ul>${rows}</ul></div>`;
 }
@@ -444,19 +503,34 @@ function viewDone() {
       <div class="actions"><button class="primary" data-act="copy-message">${icon.copy}Copy summary</button><button class="secondary" data-act="ics">${icon.cal}Add to calendar</button></div>
       ${S.sent?.link ? linkField(S.sent.link) : ''}
     </section>
+    ${canEdit() ? `<button class="text-button" data-act="edit">${icon.cal}Change the final days</button>` : ''}
     <button class="text-button" data-act="forget-current">Forget this plan on this device</button>
   </main>`;
 }
 
+// Who may change a link they made: the organiser before replies and after picking; the guest after replying
+// and after confirming; in a group the organiser can also change the locked-in days.
+function canEdit() {
+  const p = S.plan, r = S.role;
+  if (!p || !r) return false;
+  if (p.step === 4) return p.group ? r === 'a' : r === 'b';
+  return r === (p.step === 2 ? 'b' : 'a');
+}
+
 function viewWaiting() {
-  const p = S.plan, other = S.role === 'a' ? nameOf(p, 'b', 'your guest') : nameOf(p, 'a', 'the organiser');
+  const p = S.plan, groupOrg = p.group && S.role === 'a';
+  const other = groupOrg ? 'everyone' : S.role === 'a' ? nameOf(p, 'b', 'your guest') : nameOf(p, 'a', 'the organiser');
+  const n = (S.people || []).length;
+  const editLabel = p.step === 3 ? 'Change my picks' : 'Edit my days';
   return `<main class="page">${stepper(p, p.step + 1)}${banners()}
     <p class="eyebrow">Waiting</p><h1>Over to <em>${h(other)}.</em></h1>
-    <p class="lead">This is the link you sent. When ${h(other)} replies, open the link they send you. You can send this one again if it got lost.</p>
+    <p class="lead">${groupOrg ? `This is your invite link. Open each reply as it arrives${n ? `: ${plural(n, 'person')} so far` : ''}.` : `This is the link you sent. When ${h(other)} replies, open the link they send you.`} You can send it again if it got lost.</p>
+    ${groupOrg && n ? `<button class="primary wide" data-act="collect">${icon.cal}See the ${plural(n, 'reply')} and lock in a day</button>` : ''}
+    ${canEdit() ? `<button class="secondary wide edit-btn" data-act="edit">${icon.cal}${editLabel}</button><p class="small edit-note">You'll get a new link to send. The old one still opens, so tell them to use the new one.</p>` : ''}
     ${sharePanel()}</main>`;
 }
 
-const views = { home: viewHome, unlock: viewUnlock, compose: viewCompose, respond: viewRespond, pick: viewPick, confirm: viewConfirm, waiting: viewWaiting, done: viewDone };
+const views = { home: viewHome, unlock: viewUnlock, compose: viewCompose, respond: viewRespond, pick: viewPick, confirm: viewConfirm, collect: viewCollect, waiting: viewWaiting, done: viewDone };
 
 function render() {
   const active = document.activeElement;
@@ -490,32 +564,85 @@ async function copy(text, msg = 'Copied') {
 // ---------- Flow ----------
 function startNew() {
   const start = monthOf(todayIso());
-  const plan = { id: randomId(), step: 1, created: 0, title: '', start, count: 2, a: { name: '', days: {} }, picks: [] };
+  const plan = { id: randomId(), step: 1, created: 0, title: '', start, count: 2, group: false, a: { name: '', days: {}, v: 0 }, picks: [] };
   history.replaceState(null, '', baseUrl());
-  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, monthIdx: 0, choices: [] });
+  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, monthIdx: 0, choices: [], editing: false, people: [], invite: null });
   scrollTo(0, 0);
 }
 
 function enterPlan(plan, role, pass, hash) {
-  const rec = recordFor(plan.id);
-  const newer = rec && rec.hash !== hash && (rec.wire?.s || 0) > plan.step ? rec.hash : null;
+  const rec = recordFor(plan.id), saved = rec?.wire ? (() => { try { return fromWire(rec.wire); } catch { return null; } })() : null;
+  const groupOrg = plan.group && role === 'a';
+  const newer = !groupOrg && rec && rec.hash !== hash && (rec.wire?.s || 0) > plan.step ? rec.hash : null;
+  const work = clone(plan), extra = {};
+  let notice = '';
+
+  // Each person owns their own days: if this device has a newer version of mine than the link carries
+  // (I edited after the other person last saw them), keep mine.
+  const mine = role === 'a' ? 'a' : 'b';
+  if (saved?.[mine] && work[mine] && saved[mine].v > work[mine].v && (mine === 'a' || saved.b?.id === work.b?.id)) {
+    work[mine] = saved[mine];
+    if (plan.step !== 4) notice = `${role === 'a' ? (plan.group ? 'This reply was' : `${h(nameOf(plan, 'b', 'They'))} replied`) : `${h(nameOf(plan, 'a', 'They'))} answered`} to an earlier version of your days. Your latest days are kept.`;
+  }
+
+  // Groups: the organiser files each reply under the guest's hidden id; a newer reply from the same guest replaces the older one.
+  let people = [];
+  if (groupOrg) {
+    const replies = { ...(rec?.replies || {}) };
+    if (plan.step === 2 && plan.b?.id) {
+      const old = replies[plan.b.id];
+      if (!old || (old.v || 0) <= plan.b.v) replies[plan.b.id] = { n: plan.b.name, d: encodeDays(plan.b.days, plan.start, plan.count), v: plan.b.v };
+      else notice = `This is an older reply from ${h(plan.b.name || 'a guest')}. Their newer reply is kept.`;
+    }
+    extra.replies = replies;
+    if (plan.step === 1) extra.invite = hash;
+    people = repliesOf({ replies }, plan);
+    if (plan.step === 2 || plan.step === 1) { // keep the organiser's own latest plan, not the copy inside the reply
+      if (saved) { work.a = saved.a.v >= work.a.v ? saved.a : work.a; work.title = saved.title; }
+      delete work.b;
+      work.step = saved?.step === 4 ? 4 : 1;
+      work.finals = saved?.finals; work.people = saved?.people;
+      work.picks = saved?.step === 4 ? [...(saved.finals || [])] : [];
+      if (saved?.step === 4 && plan.step === 2) notice = notice || 'A new reply arrived after you locked it in. You can change the final days below.';
+    }
+  }
+
   const turn = turnAfter(plan.step);
   let view;
-  if (plan.step === 4) view = 'done';
+  if (groupOrg && plan.step === 2) view = 'collect';
+  else if (groupOrg && plan.step === 1) view = work.step === 4 ? 'done' : 'waiting';
+  else if (plan.step === 4) view = 'done';
   else if (role !== turn) view = 'waiting';
   else view = { 1: 'respond', 2: 'pick', 3: 'confirm' }[plan.step];
-  const work = clone(plan);
-  if (view === 'respond' && !work.b) work.b = { name: '', days: {} };
+
+  // A guest keeps one hidden id per plan, so a second reply replaces the first instead of adding a duplicate.
+  if (role === 'b') {
+    const id = rec?.myId || work.b?.id || randomId(9);
+    extra.myId = id;
+    if (view === 'respond') {
+      if (plan.group && saved?.b && saved.b.id === id) work.b = saved.b; // reopening the invite: start from my last reply
+      if (!work.b) work.b = { name: '', days: {}, id, v: 0 };
+      work.b.id = id;
+    }
+  }
   if (view === 'pick') work.picks = work.picks.filter(d => meet(work.a.days[d] || 0, work.b.days[d] || 0));
-  const link = `${baseUrl()}#${hash}`;
-  const sent = view === 'waiting' ? { link, text: draftMessage(plan, link), step: plan.step } : view === 'done' ? { link, text: finalSummary(plan, link), step: 4 } : null;
-  if (!newer) remember(plan, role, pass, hash);
+
+  const inviteHash = groupOrg ? (extra.invite || rec?.invite || hash) : null;
+  // The organiser's latest own link in a group (invite, or the locked-in days) stays the plan's home link.
+  const homeHash = groupOrg ? (rec?.role === 'a' && rec.hash ? rec.hash : hash) : hash;
+  const link = `${baseUrl()}#${groupOrg && view !== 'done' ? inviteHash : homeHash}`;
+  const code = role === 'b' && plan.group ? shortCode(extra.myId) : null;
+  const sent = view === 'waiting' ? { link, text: draftMessage(work, link), step: work.step, code }
+    : view === 'done' ? { link, text: finalSummary(work, link), step: 4 } : null;
+  if (!newer) remember(work, role, pass, homeHash, extra);
+
   // Show the first month that has something to act on
   const months = rangeMonths(plan.start, plan.count), today = todayIso();
-  const focusDays = view === 'pick' ? Object.keys(overlap(plan.a.days, plan.b.days)) : Object.keys(plan.a.days);
+  const focusDays = view === 'pick' ? Object.keys(overlap(work.a.days, work.b.days)) : view === 'collect' ? Object.keys(groupDays(work.a.days, people)) : Object.keys(work.a.days);
   const first = focusDays.filter(d => d >= today).sort()[0] || today;
   const monthIdx = Math.max(0, months.indexOf(monthOf(first)));
-  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, monthIdx, choices: work.picks.length === 1 ? [...work.picks] : [], notice: '' });
+  const choices = view === 'confirm' && work.picks.length === 1 ? [...work.picks] : [];
+  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, monthIdx, choices, notice, editing: false, people, invite: inviteHash });
   scrollTo(0, 0);
 }
 
@@ -563,11 +690,19 @@ async function send() {
     if (!p.a.name.trim()) return set({ error: 'Add your name so they know who it is from.' });
     if (!futureDays(p.a.days, today).length) return set({ error: 'Mark at least one day you are free.' });
     if (S.pass.trim().length < 6) return set({ error: 'Use a passphrase of at least 6 characters.' });
-    next.step = 1; next.picks = []; delete next.finals;
+    next.step = 1; next.picks = []; delete next.finals; delete next.people;
+    if (next.group) delete next.b;
+    next.a.v = (p.a.v || 0) + 1;
   } else if (S.view === 'respond') {
     if (!p.b.name.trim()) return set({ error: 'Add your name so they know who replied.' });
     if (!futureDays(p.b.days, today).length) return set({ error: 'Mark at least one day you are free.' });
     next.step = 2; next.picks = []; delete next.finals;
+    next.b.v = (p.b.v || 0) + 1;
+  } else if (S.view === 'collect') {
+    if (!p.picks.length) return set({ error: 'Pick at least one day.' });
+    next.step = 4; next.finals = [...p.picks].sort(); next.picks = [];
+    next.people = (S.people || []).map(x => ({ name: x.name, id: x.id, days: x.days }));
+    delete next.b;
   } else if (S.view === 'pick') {
     if (!p.picks.length) return set({ error: 'Pick at least one day.' });
     next.step = 3; next.picks = [...p.picks].sort(); delete next.finals;
@@ -579,12 +714,15 @@ async function send() {
   next.created = Date.now();
   set({ busy: true, error: '' });
   try {
-    const code = await seal(toWire(next), S.pass.trim());
-    const hash = `${next.id}.${code}`, link = `${baseUrl()}#${hash}`;
-    remember(next, S.role, S.pass.trim(), hash);
+    const sealed = await seal(toWire(next), S.pass.trim());
+    const hash = `${next.id}.${sealed}`, link = `${baseUrl()}#${hash}`;
+    const extra = next.group && S.role === 'a' && next.step === 1 ? { invite: hash } : {};
+    if (S.role === 'b' && next.b?.id) extra.myId = next.b.id;
+    remember(next, S.role, S.pass.trim(), hash, extra);
     history.replaceState(null, '', `#${hash}`);
-    const text = draftMessage(next, link);
-    set({ busy: false, plan: next, hash, sent: { link, text, step: next.step }, pass: S.pass.trim() });
+    const text = draftMessage(next, link, { update: S.editing });
+    const code = next.group && S.role === 'b' ? shortCode(next.b.id) : null;
+    set({ busy: false, plan: next, hash, sent: { link, text, step: next.step, code }, pass: S.pass.trim(), invite: extra.invite || S.invite });
     scrollTo(0, 0);
   } catch (e) {
     set({ busy: false, error: 'Could not lock the plan in this browser. Try a recent version of Chrome, Safari, Firefox or Edge.' });
@@ -595,8 +733,21 @@ async function send() {
 function revise() {
   const p = clone(S.plan);
   p.picks = []; delete p.finals;
-  if (S.role === 'a') set({ view: 'compose', plan: p, sent: null, error: '', notice: 'Add more days, then send the new link. Their days stay marked with a dashed outline.' });
+  if (S.role === 'a' && p.group) set({ view: 'compose', plan: p, sent: null, error: '', editing: true, notice: 'Add more days, then send everyone the new link. Replies you already have are kept.' });
+  else if (S.role === 'a') set({ view: 'compose', plan: p, sent: null, error: '', notice: 'Add more days, then send the new link. Their days stay marked with a dashed outline.' });
   else set({ view: 'respond', plan: p, sent: null, error: '', notice: 'Change your days, then send the new link back.' });
+  scrollTo(0, 0);
+}
+
+// Change a link that was already sent: reopen the step that made it, filled in, and send a new link.
+function edit() {
+  const p = clone(S.plan), r = S.role;
+  const base = { plan: p, sent: null, error: '', notice: '', editing: true };
+  if (p.step === 4 && p.group) { p.picks = [...(p.finals || [])]; delete p.finals; set({ ...base, view: 'collect' }); }
+  else if (p.step === 4) { const finals = p.finals || []; delete p.finals; set({ ...base, view: 'confirm', choices: [...finals] }); }
+  else if (p.step === 3) set({ ...base, view: 'pick' });
+  else if (r === 'b') set({ ...base, view: 'respond' });
+  else set({ ...base, view: 'compose' });
   scrollTo(0, 0);
 }
 
@@ -636,7 +787,7 @@ $app.addEventListener('click', e => {
     case 'day': {
       const iso = el.dataset.day;
       focusKey = `day-${iso}`;
-      if (S.view === 'pick') { const i = p.picks.indexOf(iso); i >= 0 ? p.picks.splice(i, 1) : p.picks.push(iso); }
+      if (S.view === 'pick' || S.view === 'collect') { const i = p.picks.indexOf(iso); i >= 0 ? p.picks.splice(i, 1) : p.picks.push(iso); }
       else { const d = myDays(), m = cycle(d[iso] || 0); if (m) d[iso] = m; else delete d[iso]; }
       set({ error: '' }); break;
     }
@@ -649,6 +800,11 @@ $app.addEventListener('click', e => {
     case 'send': send(); break;
     case 'unsend': set({ sent: null }); break;
     case 'revise': revise(); break;
+    case 'edit': edit(); break;
+    case 'group': p.group = el.dataset.on === '1'; render(); break;
+    case 'collect': set({ view: 'collect', sent: null, notice: '' }); scrollTo(0, 0); break;
+    case 'show-invite': { const link = `${baseUrl()}#${S.invite}`; set({ view: 'waiting', plan: { ...clone(p), step: 1 }, sent: { link, text: draftMessage({ ...p, step: 1 }, link), step: 1 } }); scrollTo(0, 0); break; }
+    case 'pick-everyone': { const g = groupDays(p.a.days, S.people || []); p.picks = Object.keys(g).filter(d => d >= todayIso() && g[d].free.length === (S.people || []).length); render(); break; }
     case 'copy-message': copy(document.querySelector('[data-input=message]')?.value || S.sent.text, 'Message copied'); break;
     case 'copy-link': copy(S.sent.link, 'Link copied'); break;
     case 'copy-pass': copy(S.pass, 'Passphrase copied'); break;

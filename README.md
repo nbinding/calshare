@@ -16,6 +16,10 @@
 | 3 | Organiser | Sees only the days both are free, with compatible times, and picks one or several. |
 | 4 | Guest | Locks in one final day, or several when planning a week or month at a time, and gets a ready-made summary, a confirmation link and an `.ics` calendar file. |
 
+**Group plans.** Choose *A group* when you start. Everyone gets the same link, adds their days and sends their own reply back to the organiser. Each guest gets a hidden random ID on their device, so two people with the same name never overwrite each other: duplicates show as *Sam · K7* and *Sam · Q2*, and each guest sees their own reply code. Replying again replaces that guest's earlier reply. The organiser sees how many can make each day (*3 of 4*), locks in one or more days and sends one confirmation to everyone.
+
+**Editing after sending.** Every waiting screen has *Edit my days* (or *Change my picks*), and settled plans have *Change the final days* for whoever locked them in. You get a new link with an "I've updated my days, use this link instead" message and the same passphrase. Each person owns their own days, so if someone replies to an older link, your latest days are kept and a note says so.
+
 If nothing lines up, either side can change their days and send the plan back. A progress bar shows whose turn it is. Every share screen offers Share, Copy message, Copy link, and the link on its own in a selectable box for browsers that block the copy buttons.
 
 ## Privacy and security

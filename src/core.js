@@ -102,33 +102,89 @@ export function decodeDays(str, start, count) {
 }
 
 // ---- Plan <-> wire payload ----
-// Plan: { id, step, created, title, start, count, a:{name,days}, b:{name,days}, picks:[iso], finals:[iso] }
-// step = the step that produced this link: 1 owner shared, 2 recipient replied, 3 owner picked, 4 recipient confirmed.
+// Plan: { id, step, created, title, start, count, group, a:{name,days,v}, b:{name,days,id,v}, picks:[iso], finals:[iso], people:[{name,id,days}] }
+// step = the step that produced this link: 1 organiser shared, 2 guest replied, 3 organiser picked, 4 settled.
+// group: one invite link went to several guests; the organiser collects replies and locks in the final days (step 4) directly.
+// v counts edits to that person's own days, so a reply to an older link never overwrites newer days.
+// b.id / people[].id is a random id made on the guest's device, so two guests with the same name stay separate.
+const ver = v => (Number.isInteger(v) && v > 0 ? v : 0);
+const cleanId = id => (typeof id === 'string' && /^[A-Za-z0-9_-]{4,32}$/.test(id) ? id : '');
+
 export function toWire(plan) {
+  const enc = days => encodeDays(days, plan.start, plan.count);
   const w = { v: 1, i: plan.id, s: plan.step, t: plan.created, m: plan.start, c: plan.count };
   if (plan.title) w.n = plan.title;
-  w.a = { n: plan.a.name, d: encodeDays(plan.a.days, plan.start, plan.count) };
-  if (plan.b) w.b = { n: plan.b.name, d: encodeDays(plan.b.days, plan.start, plan.count) };
+  if (plan.group) w.g = 1;
+  w.a = { n: plan.a.name, d: enc(plan.a.days) };
+  if (plan.a.v) w.a.v = plan.a.v;
+  if (plan.b) {
+    w.b = { n: plan.b.name, d: enc(plan.b.days) };
+    if (plan.b.id) w.b.u = plan.b.id;
+    if (plan.b.v) w.b.v = plan.b.v;
+  }
   if (plan.picks?.length) w.p = plan.picks.map(iso => dayOffset(plan.start, iso));
   if (plan.finals?.length) w.f = plan.finals.map(iso => dayOffset(plan.start, iso));
+  if (plan.people?.length) w.q = plan.people.map(x => ({ n: x.name, u: x.id, d: enc(x.days) }));
   return w;
 }
 
 export function fromWire(w) {
   if (!w || w.v !== 1 || !/^\d{4}-\d{2}$/.test(w.m) || !(w.c >= 1 && w.c <= MAX_MONTHS) || !(w.s >= 1 && w.s <= 4) || !w.a) throw new Error('bad plan');
+  const name = n => String(n || '').slice(0, 40), dec = d => decodeDays(d, w.m, w.c);
   const plan = {
     id: String(w.i), step: w.s, created: Number(w.t) || 0, title: w.n ? String(w.n).slice(0, 80) : '',
-    start: w.m, count: w.c,
-    a: { name: String(w.a.n || '').slice(0, 40), days: decodeDays(w.a.d, w.m, w.c) },
+    start: w.m, count: w.c, group: w.g === 1,
+    a: { name: name(w.a.n), days: dec(w.a.d), v: ver(w.a.v) },
   };
-  if (w.b) plan.b = { name: String(w.b.n || '').slice(0, 40), days: decodeDays(w.b.d, w.m, w.c) };
+  if (w.b) plan.b = { name: name(w.b.n), days: dec(w.b.d), id: cleanId(w.b.u), v: ver(w.b.v) };
   plan.picks = Array.isArray(w.p) ? w.p.map(o => isoAtOffset(w.m, o | 0)) : [];
   // f was a single offset in the first release; it is now a list.
   if (w.f != null) plan.finals = (Array.isArray(w.f) ? w.f : [w.f]).map(o => isoAtOffset(w.m, o | 0));
+  if (Array.isArray(w.q)) plan.people = w.q.slice(0, 50).map(x => ({ name: name(x?.n), id: cleanId(x?.u), days: dec(x?.d) }));
   return plan;
 }
 
-// Whose turn a link at this step hands over to: 'b' after steps 1 and 3, 'a' after step 2, nobody once done.
+// ---- Groups ----
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+// A short, stable code from a guest's hidden id, shown only to tell people with the same name apart.
+export function shortCode(id, len = 2) {
+  let h = 2166136261;
+  for (const ch of String(id)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  let out = '';
+  for (let i = 0; i < len; i++) { out += CODE_CHARS[h & 31]; h >>>= 5; }
+  return out;
+}
+
+// Labels for a list of people: a name on its own, or "Sam · K7" when the name is shared.
+export function labelPeople(people) {
+  const key = p => p.name.trim().toLowerCase();
+  const count = {};
+  for (const p of people) count[key(p)] = (count[key(p)] || 0) + 1;
+  const labels = {};
+  for (const p of people) {
+    const shown = p.name.trim() || 'Guest';
+    if (count[key(p)] < 2) { labels[p.id] = shown; continue; }
+    const twins = people.filter(x => key(x) === key(p));
+    const len = new Set(twins.map(x => shortCode(x.id))).size === twins.length ? 2 : 4;
+    labels[p.id] = `${shown} · ${shortCode(p.id, len)}`;
+  }
+  return labels;
+}
+
+// For each day the organiser is free: who else can make it, and the time that suits them all.
+export function groupDays(aDays, people) {
+  const out = {};
+  for (const iso of Object.keys(aDays)) {
+    const free = people.filter(p => meet(aDays[iso], p.days[iso] || 0));
+    if (!free.length) continue;
+    let mask = aDays[iso];
+    for (const p of free) { const m = meet(mask, p.days[iso]); if (m) mask = m; }
+    out[iso] = { mask, free: free.map(p => p.id) };
+  }
+  return out;
+}
+
+// Whose turn a link at this step hands over to: 'b' after steps 1 and 3, 'a' after step 2, nobody once settled.
 export const turnAfter = step => (step === 1 || step === 3 ? 'b' : step === 2 ? 'a' : null);
 
 export function isStale(plan, now = Date.now()) { return plan.created > 0 && now - plan.created > STALE_DAYS * 86400000; }
@@ -144,29 +200,45 @@ const shortDay = iso => formatDay(iso, { weekday: 'short', day: 'numeric', month
 const about = plan => (plan.title ? ` for ${plan.title}` : '');
 const passNote = "It's locked with a passphrase, which I'll send you in a separate message.";
 
-export function draftMessage(plan, link) {
-  const A = plan.a.name || 'I', B = plan.b?.name || '';
+export function draftMessage(plan, link, { update = false } = {}) {
+  const B = plan.b?.name || '';
   switch (plan.step) {
-    case 1: return `Hi${B ? ' ' + B : ''}! Can we find a day${about(plan)}? I've marked the days I'm free here. Add yours and send the link back:\n${link}\n${passNote}`;
+    case 1:
+      if (update) return `I've updated my days${about(plan)}. Please use this link instead of the one I sent before (same passphrase):\n${link}`;
+      if (plan.group) return `Hi all! Can we find a day${about(plan)}? I've marked the days I'm free here. Open the link, add your days and send it back to me:\n${link}\n${passNote}`;
+      return `Hi${B ? ' ' + B : ''}! Can we find a day${about(plan)}? I've marked the days I'm free here. Add yours and send the link back:\n${link}\n${passNote}`;
     case 2: {
       const n = Object.keys(overlap(plan.a.days, plan.b.days)).length;
-      return `Here are my days${about(plan)}. ${n ? `We overlap on ${n} day${n === 1 ? '' : 's'}.` : `It doesn't look like we overlap yet.`} Pick the ones that suit you:\n${link}`;
+      const lead = update ? `I've updated my days${about(plan)}. Use this link instead of my earlier one.` : `Here are my days${about(plan)}.`;
+      if (plan.group) return `${lead} ${n ? `I can do ${n} of your days.` : `I can't do any of your days, sorry.`}\n${link}`;
+      return `${lead} ${n ? `We overlap on ${n} day${n === 1 ? '' : 's'}.` : `It doesn't look like we overlap yet.`} Pick the ones that suit you:\n${link}`;
     }
     case 3: {
       const list = plan.picks.map(shortDay).join(', ');
-      return `I've narrowed it down${about(plan)}: ${list}. Choose the one you'd like (or more than one) and it's settled:\n${link}`;
+      return `${update ? `I've changed the options${about(plan)}` : `I've narrowed it down${about(plan)}`}: ${list}. Choose the one you'd like (or more than one) and it's settled:\n${link}`;
     }
-    default: return finalSummary(plan, link);
+    default: return (update ? 'Change of plan! ' : '') + finalSummary(plan, link);
   }
 }
 
-const timeOn = (plan, iso) => meet(plan.a.days[iso] || 0, plan.b?.days[iso] || 0);
+const everyone = plan => [plan.a.name, ...(plan.group ? (plan.people || []).map(p => p.name) : [plan.b?.name])].filter(Boolean);
+const joinNames = names => (names.length > 1 ? names.slice(0, -1).join(', ') + ' & ' + names.at(-1) : names[0] || '');
+// The agreed time on a day, and for groups how many of everyone can make it.
+function dayInfo(plan, iso) {
+  if (!plan.group) return { mask: meet(plan.a.days[iso] || 0, plan.b?.days[iso] || 0) };
+  const g = groupDays({ [iso]: plan.a.days[iso] || FREE }, plan.people || [])[iso];
+  return { mask: g?.mask || plan.a.days[iso] || FREE, going: (g?.free.length || 0) + 1, of: (plan.people || []).length + 1 };
+}
+export function dayNote(plan, iso) {
+  const { mask, going, of } = dayInfo(plan, iso);
+  return [tagsOf(mask) ? tagWords(mask) : '', going ? `${going} of ${of} can make it` : ''].filter(Boolean).join(', ');
+}
 const longDay = iso => formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
 export function finalSummary(plan, link) {
   const finals = plan.finals || [];
-  const who = [plan.a.name, plan.b?.name].filter(Boolean).join(' & ');
-  const line = iso => { const m = timeOn(plan, iso); return `${longDay(iso)}${tagsOf(m) ? ` (${tagWords(m)})` : ''}`; };
+  const who = joinNames(everyone(plan));
+  const line = iso => { const n = dayNote(plan, iso); return `${longDay(iso)}${n ? ` (${n})` : ''}`; };
   let body;
   if (finals.length === 1) body = `It's settled: ${plan.title ? `${plan.title} is on` : `we're meeting on`} ${line(finals[0])}.`;
   else body = `It's settled${plan.title ? ` for ${plan.title}` : ''}. We're meeting on ${finals.length} days:\n${finals.map(d => `• ${line(d)}`).join('\n')}`;
@@ -176,13 +248,13 @@ export function finalSummary(plan, link) {
 export function icsFor(plan, now = new Date()) {
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const esc = s => s.replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
-  const who = [plan.a.name, plan.b?.name].filter(Boolean).join(' & ');
+  const who = joinNames(everyone(plan));
   const events = (plan.finals || []).flatMap(iso => {
     const d = iso.replace(/-/g, '');
     const next = isoFromDate(new Date(parseIso(iso).getTime() + 86400000)).replace(/-/g, '');
     return ['BEGIN:VEVENT', `UID:${plan.id}-${d}@calshare`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`,
       `SUMMARY:${esc(plan.title || (who ? `Meet: ${who}` : 'Meet up'))}`,
-      `DESCRIPTION:${esc(`Agreed with Calshare${who ? ' by ' + who : ''}. Time: ${tagWords(timeOn(plan, iso))}.`)}`,
+      `DESCRIPTION:${esc(`Agreed with Calshare${who ? ' by ' + who : ''}. Time: ${tagWords(dayInfo(plan, iso).mask)}.`)}`,
       'TRANSP:TRANSPARENT', 'END:VEVENT'];
   });
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Calshare//EN', ...events, 'END:VCALENDAR', ''].join('\r\n');
