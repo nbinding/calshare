@@ -30,8 +30,10 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--surface); color: var(--ink); font: 16px/1.6 Arial, Helvetica, sans-serif; font-synthesis: none; }
+@font-face { font-family: OpenDyslexic; src: url(fonts/OpenDyslexic-Regular.woff2) format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: OpenDyslexic; src: url(fonts/OpenDyslexic-Bold.woff2) format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+html { -webkit-text-size-adjust: 100%; font-size: calc(16px * var(--text-scale, 1)); }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 1rem/1.6 Arial, Helvetica, sans-serif; font-synthesis: none; }
 button, input, select, textarea { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
@@ -102,8 +104,8 @@ textarea { resize: vertical; line-height: 1.5; min-height: 120px; }
 .actions .primary:only-of-type:first-child { grid-column: 1 / -1; }
 
 /* Segmented control */
-.segmented { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
-.segmented button { flex: 1 1 0; min-height: 40px; padding: 6px 4px; border: 0; border-radius: 5px; background: none; font-size: .875rem; color: var(--muted-ink); white-space: nowrap; }
+.segmented { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
+.segmented button { flex: 1 1 auto; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 5px; background: none; font-size: .875rem; color: var(--muted-ink); white-space: nowrap; }
 .segmented button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .brush { margin-bottom: 16px; }
 .brush .small { margin-bottom: 8px; }
@@ -215,6 +217,64 @@ footer { max-width: 640px; margin: 0 auto; padding: 20px 16px max(28px, env(safe
 .toast { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translate(-50%, 20px); padding: 12px 18px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: .9375rem; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 10; max-width: calc(100vw - 32px); }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* Skip link */
+.skip-link { position: absolute; left: 16px; top: -100px; z-index: 30; padding: 12px 16px; border-radius: var(--radius); background: var(--accent); color: var(--accent-ink); font-weight: 600; text-decoration: none; }
+.skip-link:focus { top: 12px; }
+main:focus { outline: none; }
+
+/* Display and accessibility dialog */
+body.dialog-open { overflow: hidden; }
+.backdrop { position: fixed; inset: 0; z-index: 20; background: #0008; }
+.dialog { position: fixed; z-index: 21; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 20px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 20px 60px #0005; }
+.dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.dialog-head h2 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 1.5rem; line-height: 1.25; letter-spacing: -.4px; }
+.dialog fieldset { border: 0; margin: 22px 0 0; padding: 0; min-width: 0; }
+.dialog legend { font-weight: 600; margin-bottom: 10px; padding: 0; }
+.dialog fieldset .small { margin-top: 8px; }
+.setting-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.setting-options button { flex: 1 1 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 52px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); font-size: .9375rem; line-height: 1.35; }
+.setting-options button small { font-size: .75rem; color: var(--muted-ink); }
+.setting-options button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--panel); font-weight: 600; }
+.setting-toggle { display: flex; align-items: flex-start; gap: 12px; margin-top: 18px; cursor: pointer; }
+.setting-toggle input { width: 22px; height: 22px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--accent); }
+.setting-toggle span { display: flex; flex-direction: column; }
+.setting-toggle small { font-size: .875rem; color: var(--muted-ink); line-height: 1.5; }
+.settings-preview { margin-top: 22px; padding: 14px; border: 1px dashed var(--line); border-radius: 8px; background: var(--panel); }
+.settings-preview .eyebrow { margin-bottom: 6px; }
+.dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+
+/* Day squares keep their labels inside the square at any text size or font */
+.cell { overflow: hidden; }
+.cell .num { font-size: min(1rem, 5.2vw); }
+.cell .tags { font-size: min(.62rem, 2.7vw); }
+.weekdays span { font-size: min(.72rem, 3vw); overflow: hidden; }
+
+/* Help with dates */
+.cell .wd { display: none; }
+html[data-date-help="true"] .cell { aspect-ratio: auto; min-height: 56px; border-width: 2px; }
+html[data-date-help="true"] .cell .wd { display: block; font-size: min(.6rem, 2.3vw); letter-spacing: 0; text-transform: uppercase; line-height: 1; opacity: .85; }
+html[data-date-help="true"] .cell.theirs { border-width: 3px; }
+html[data-date-help="true"] .cell.allowed { border-width: 3px; }
+html[data-date-help="true"] .cell.past { opacity: .6; }
+
+/* Reading font */
+html[data-font="sans"] :is(h1, h2, h3, .brand, .month-head h3, .final-card h2, .tear strong, .how .num, .dialog-head h2) { font-family: Arial, Helvetica, sans-serif; font-style: normal; letter-spacing: normal; }
+html[data-font="sans"] h1 em { font-style: normal; }
+html[data-font="dyslexic"] :is(body, button, input, textarea, select, h1, h2, h3, p, span, strong, small, em, label, legend, code) { font-family: OpenDyslexic, Arial, sans-serif !important; font-style: normal; letter-spacing: normal; }
+html[data-font="dyslexic"] h1 { font-size: clamp(1.7rem, 6.5vw, 2.3rem); line-height: 1.4; }
+html[data-font="dyslexic"] .cell .num { font-size: min(.875rem, 4.2vw); }
+html[data-font="dyslexic"] .cell .tags, html[data-font="dyslexic"] .cell .wd { font-size: min(.5rem, 1.9vw); }
+html[data-font="dyslexic"] .weekdays span { font-size: min(.6rem, 2.4vw); }
+
+/* More breathing room */
+html[data-spacing="true"] :is(p, label, button, input, textarea, select, li, small, span):not(.cell, .cell *, .weekdays *, .month-tabs *) { letter-spacing: .035em !important; word-spacing: .1em !important; }
+html[data-spacing="true"] :is(p, li, label, textarea, .lead, .small) { line-height: 1.9 !important; }
+html[data-spacing="true"] .card { padding: 22px 18px; }
+html[data-spacing="true"] .grid { gap: 7px; }
+
+/* Reduce motion */
+html[data-motion="true"] *, html[data-motion="true"] *::before, html[data-motion="true"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+
 @media (max-width: 380px) {
   .grid { gap: 3px; }
   .cell { min-height: 38px; border-radius: 6px; }
@@ -225,3 +285,5 @@ footer { max-width: 640px; margin: 0 auto; padding: 20px 16px max(28px, env(safe
 }
 @media (min-width: 700px) { .page { padding-top: 48px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.month-head h3 { font-size: min(1.3rem, 6.4vw); text-align: center; min-width: 0; overflow-wrap: anywhere; }
+html[data-font="dyslexic"] .month-head h3 { font-size: min(1.1rem, 5.2vw); }
