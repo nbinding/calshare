@@ -5,7 +5,7 @@ import { freshPage, expectNoSidewaysScroll, day } from './helpers.mjs';
 test('display settings apply, persist and keep the calendar intact', async ({ page }) => {
   const errors = await freshPage(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start a plan' }).click();
+  await page.getByRole('button', { name: 'Start a plan', exact: true }).click();
   const trigger = page.getByRole('button', { name: 'Display and accessibility settings' });
   await trigger.click();
   const dialog = page.getByRole('dialog');

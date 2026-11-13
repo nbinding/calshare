@@ -28,6 +28,11 @@ test('app code avoids eval-like APIs and external hosts', async () => {
   }
 });
 
+test('app templates use no inline style attributes (blocked by the CSP)', async () => {
+  const js = await read('src/app.js');
+  assert.ok(!/\sstyle="/.test(js), 'inline style="" found in src/app.js; use a class instead');
+});
+
 test('passphrase key derivation stays strong', async () => {
   const js = await read('src/share.js');
   assert.match(js, /ITERATIONS = 600000/);

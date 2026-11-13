@@ -10,7 +10,7 @@ test('owner and guest agree on two days', async ({ browser }, info) => {
 
   // Step 1: owner marks days (one tagged evening) and makes a link.
   await owner.goto('/');
-  await owner.getByRole('button', { name: 'Start a plan' }).click();
+  await owner.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await owner.fill('[data-input=a-name]', 'Sam');
   await owner.fill('[data-input=title]', 'Dinner');
   for (const d of ['2026-11-20', '2026-11-21', '2026-11-25', '2026-11-28']) await owner.click(day(d));
@@ -77,7 +77,7 @@ test('no shared days lets the owner add more', async ({ browser }, info) => {
   const guest = await (await browser.newContext({ ...device })).newPage();
   await freshPage(owner); await freshPage(guest);
   await owner.goto('/');
-  await owner.getByRole('button', { name: 'Start a plan' }).click();
+  await owner.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await owner.fill('[data-input=a-name]', 'Sam');
   await owner.click(day('2026-11-20'));
   const pass = await owner.inputValue('[data-input=pass]');
@@ -98,7 +98,7 @@ test('no shared days lets the owner add more', async ({ browser }, info) => {
 test('each day gets its own time, and the guide can be dismissed and reopened', async ({ page }) => {
   await freshPage(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start a plan' }).click();
+  await page.getByRole('button', { name: 'Start a plan', exact: true }).click();
   const guide = page.getByRole('complementary', { name: 'How to mark your days' });
   await expect(guide).toBeVisible();
   await expect(guide).toContainText('M morning');
@@ -129,7 +129,7 @@ test('each day gets its own time, and the guide can be dismissed and reopened', 
   await guide.getByRole('button', { name: 'Got it' }).click();
   await expect(guide).toBeHidden();
   await page.reload();
-  await page.getByRole('button', { name: 'Start a plan' }).click();
+  await page.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await expect(guide).toBeHidden();
   await page.getByRole('button', { name: 'How marking days works' }).click();
   await expect(guide).toBeVisible();

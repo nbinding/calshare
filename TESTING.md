@@ -13,7 +13,7 @@ These use Node's built-in test runner, need no install, and run in about a secon
 
 ## 2. Browser tests (`npm run test:e2e`)
 
-These are Playwright tests in `test/e2e/`. Each test runs on two phone sizes, iPhone 13 and iPhone SE (320px wide), with the clock fixed to 13 November 2026 so the calendar is the same on every run. `test/serve.mjs` serves the repo.
+These are Playwright tests in `test/e2e/`. Each test runs at three sizes, iPhone 13, iPhone SE (320px wide) and a 1280px desktop browser, with the clock fixed to 13 November 2026 so the calendar is the same on every run. `test/serve.mjs` serves the repo.
 
 | File | Covers |
 |---|---|
@@ -21,6 +21,7 @@ These are Playwright tests in `test/e2e/`. Each test runs on two phone sizes, iP
 | `accessibility.spec.mjs` | The Display dialog takes and returns focus and closes with Escape. Every setting at its maximum (150%, OpenDyslexic, dark, help with dates, more spacing, reduced motion) is applied, survives a reload, and keeps every calendar label inside its square with no sideways scrolling. Reset works. The skip link moves focus to the main content. |
 | `group.spec.mjs` | A group plan with an organiser and three guests, two of them called Sam. Both Sams are kept apart and labelled with their reply codes. Day counts (4/4, 2/4) are correct. A guest replying again replaces their earlier reply, and an older reply doesn't undo a newer one. "Days everyone can do", lock-in, the guest's settled view, and changing the final days later. |
 | `edit.spec.mjs` | The organiser edits after sending, from the home screen, and gets the "updated" message. The guest replies to the old link and the organiser's newer days are kept. The guest edits their reply. The guest changes the final days after confirming. |
+| `layout.spec.mjs` | The desktop sidebar and breadcrumb appear only on desktop, follow the current step (4 steps, or 3 for groups), and the content sits beside the sidebar with no sideways scrolling. |
 | `security.spec.mjs` | A crafted link with `<img onerror>` and `<script>` in the name and title is shown as text and never runs. A link whose plan id doesn't match its contents is rejected. The page makes no requests to other hosts. |
 
 First run:
@@ -42,7 +43,7 @@ npm run test:e2e
 `.github/workflows/ci.yml` runs two jobs:
 
 - **Unit and security checks:** `npm test`
-- **Browser tests (phone sizes):** installs Chromium, runs Playwright, and uploads the report and traces as an artifact if anything fails. CI retries a failing browser test once.
+- **Browser tests (phone and desktop sizes):** installs Chromium, runs Playwright, and uploads the report and traces as an artifact if anything fails. CI retries a failing browser test once.
 
 Dependabot (`.github/dependabot.yml`) keeps the GitHub Actions versions current weekly and checks npm monthly.
 
@@ -51,7 +52,7 @@ Dependabot (`.github/dependabot.yml`) keeps the GitHub Actions versions current 
 Only the repo owner can change these, in **Settings**:
 
 - **Code security:** turn on secret scanning and push protection.
-- **Branches → `main`:** require the *Unit and security checks*, *Browser tests (phone sizes)* and *Analyze JavaScript* checks to pass before merging. This stops a broken change from going live.
+- **Branches → `main`:** require the *Unit and security checks*, *Browser tests (phone and desktop sizes)* and *Analyze JavaScript* checks to pass before merging. This stops a broken change from going live.
 
 ## Manual checks before a release
 

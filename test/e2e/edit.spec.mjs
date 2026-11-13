@@ -8,7 +8,7 @@ test('organiser edits after sending; a reply to the old link keeps the new days'
   const errors = [await freshPage(owner), await freshPage(guest)];
 
   await owner.goto('/');
-  await owner.getByRole('button', { name: 'Start a plan' }).click();
+  await owner.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await owner.fill('[data-input=a-name]', 'Sam');
   for (const d of ['2026-11-20', '2026-11-21']) await owner.click(day(d));
   const pass = await owner.inputValue('[data-input=pass]');
@@ -62,7 +62,7 @@ test('the guest can change the final days after confirming', async ({ browser },
   const guest = await (await browser.newContext({ ...info.project.use })).newPage();
   await freshPage(owner); await freshPage(guest);
   await owner.goto('/');
-  await owner.getByRole('button', { name: 'Start a plan' }).click();
+  await owner.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await owner.fill('[data-input=a-name]', 'Sam');
   for (const d of ['2026-11-20', '2026-11-21']) await owner.click(day(d));
   const pass = await owner.inputValue('[data-input=pass]');

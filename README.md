@@ -31,6 +31,10 @@ If nothing lines up, either side can change their days and send the plan back. A
 - **Compact links.** One hex digit per day keeps a 3-month plan with both people's days to about 250–450 characters.
 - Links older than 14 days show a warning. Opening an older link after a later step has been saved points to the newer one.
 
+## Layout
+
+Phones get a single column with a progress bar at the top. In desktop browsers (1000px and wider) the layout follows stead-mobile: a fixed sidebar with the brand, the plan's steps as a numbered list showing where you are, a progress bar and the privacy note, plus a header breadcrumb ("Calshare / Step 2 of 4") and a wider content column.
+
 ## Display and accessibility
 
 The **Display** button opens settings adapted from stead-mobile: text size (100–150%), reading font (Original, Plain sans or the bundled OpenDyslexic), appearance (device, light or dark), help with dates (weekday in every day square, today labelled, stronger outlines), more breathing room and reduced motion. The settings last for the current tab (`sessionStorage`). There's also a skip link, focus is trapped in the dialog, and calendar states are shown by shape (fill, dashed outline, ring), never by colour alone.

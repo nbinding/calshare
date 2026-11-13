@@ -43,7 +43,7 @@ test('the page makes no network requests after loading', async ({ page }) => {
   page.on('request', r => { if (!r.url().startsWith('http://localhost:4173/') && !r.url().startsWith('data:')) external.push(r.url()); });
   await freshPage(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start a plan' }).click();
+  await page.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await page.click('[data-day="2026-11-20"]');
   expect(external).toEqual([]);
 });

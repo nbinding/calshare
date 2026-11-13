@@ -22,7 +22,7 @@ test('group: replies are kept apart by hidden id and the organiser locks in a da
   const org = await person(browser, info), sam1 = await person(browser, info), sam2 = await person(browser, info), jo = await person(browser, info);
 
   await org.page.goto('/');
-  await org.page.getByRole('button', { name: 'Start a plan' }).click();
+  await org.page.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await org.page.fill('[data-input=a-name]', 'Nat');
   await org.page.fill('[data-input=title]', 'Hike');
   await org.page.getByRole('radio', { name: 'A group' }).click();

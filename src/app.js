@@ -108,23 +108,68 @@ function displayDialog() {
 }
 
 // ---------- Rendering pieces ----------
+const brand = () => `<a class="brand" href="${h(baseUrl())}" data-act="home"><span class="brand-mark">c</span>calshare<span class="brand-period">.</span></a>`;
+
+function crumb() {
+  if (S.view === 'home') return 'Home';
+  if (S.view === 'unlock') return 'Open a plan';
+  const total = S.plan?.group ? 3 : 4;
+  return shownStep > total ? 'Settled' : `Step ${shownStep} of ${total}${S.view === 'waiting' ? ' · Waiting' : ''}`;
+}
+
 function header() {
   return `<header class="topbar">
-    <a class="brand" href="${h(baseUrl())}" data-act="home"><span class="brand-mark">c</span>calshare<span class="brand-period">.</span></a>
+    ${brand()}
+    <div class="breadcrumb">Calshare <span aria-hidden="true">/</span> <strong>${h(crumb())}</strong></div>
     <div class="top-actions">
       <button class="chip-button" data-act="open-display" data-focus="open-display" aria-label="Display and accessibility settings" aria-haspopup="dialog">${icon.settings}<span>Display</span></button>
     </div>
   </header>`;
 }
 
-function stepper(plan, step) {
+function stepLabels(plan) {
   const A = nameOf(plan, 'a', 'Organiser'), B = nameOf(plan, 'b', 'Guest');
-  const labels = plan.group ? [`${A} invites`, 'Everyone adds days', `${A} locks it in`] : [`${A} shares`, `${B} adds days`, `${A} picks`, `${B} confirms`];
+  return plan.group
+    ? [[`${A} invites`, 'Sends one link to everyone'], ['Everyone adds days', 'Each person replies separately'], [`${A} locks it in`, 'Picks the days that suit most']]
+    : [[`${A} shares`, 'Marks free days and sends the link'], [`${B} adds days`, 'Marks theirs and sends it back'], [`${A} picks`, 'Chooses from the shared days'], [`${B} confirms`, 'Locks in the final days']];
+}
+let shownStep = 0; // the step the current view is on; read by the desktop sidebar and breadcrumb
+
+function stepper(plan, step) {
+  const labels = stepLabels(plan).map(x => x[0]);
   if (plan.group) step = { 1: 1, 2: 2, 3: 3, 4: 3, 5: 4 }[step];
+  shownStep = step;
   return `<ol class="stepper" aria-label="Progress">${labels.map((l, i) => {
     const n = i + 1, cls = n < step ? 'done' : n === step ? 'current' : '';
     return `<li class="${cls}" ${n === step ? 'aria-current="step"' : ''}><span class="dot">${n < step ? '✓' : n}</span><span class="label">${h(l)}</span></li>`;
   }).join('')}</ol>`;
+}
+
+// Desktop sidebar, after stead-mobile: brand, where you are, and the privacy note. Hidden on phones.
+function sidebar() {
+  const p = S.plan, inPlan = p && !['home', 'unlock'].includes(S.view);
+  let nav;
+  if (inPlan) {
+    const steps = stepLabels(p), cur = shownStep;
+    nav = `<ol class="side-steps" aria-label="Plan steps">${steps.map(([t, d], i) => {
+      const n = i + 1, state = n < cur ? 'done' : n === cur ? 'active' : '';
+      return `<li class="nav-item ${state}" ${n === cur ? 'aria-current="step"' : ''}><span class="nav-number">${n < cur ? '✓' : String(n).padStart(2, '0')}</span><span><strong>${h(t)}</strong><small>${h(d)}</small></span>${n === cur ? '<span class="active-dot"></span>' : ''}</li>`;
+    }).join('')}</ol>`;
+  } else {
+    const plans = Object.entries(loadStore().plans).sort((x, y) => y[1].updated - x[1].updated).slice(0, 5);
+    nav = `<nav aria-label="Plans"><button class="nav-item ${S.view === 'home' ? 'active' : ''}" data-act="new"><span class="nav-number">+</span><span><strong>Start a plan</strong><small>Mark your days and share a link</small></span></button>
+      ${plans.map(([, r]) => { let q; try { q = fromWire(r.wire); } catch { return ''; } return `<a class="nav-item" href="#${h(r.hash)}"><span class="nav-number">${q.step === 4 ? '✓' : '·'}</span><span><strong>${h(q.title || nameOf(q, 'a', 'Plan'))}</strong><small>${q.step === 4 ? 'Settled' : q.group ? 'Group plan' : 'In progress'}</small></span></a>`; }).join('')}</nav>`;
+  }
+  const total = p?.group ? 3 : 4, done = inPlan ? Math.min(shownStep - 1, total) : 0;
+  return `<aside class="sidebar" aria-label="Calshare">
+    ${brand()}
+    <p class="workspace-label">Private, day-level scheduling</p>
+    ${nav}
+    <div class="sidebar-bottom">
+      ${inPlan ? `<div class="progress-label"><span>${p.title ? h(p.title) : 'This plan'}</span><span>${done} / ${total}</span></div><progress class="progress-track" value="${done}" max="${total}" aria-label="Steps done">${done} of ${total}</progress>` : ''}
+      <p class="privacy">${icon.lock}<span>Encrypted in your browser.<br>Nothing is sent to a server.</span></p>
+    </div>
+  </aside>`;
 }
 
 function banners() {
@@ -535,7 +580,9 @@ const views = { home: viewHome, unlock: viewUnlock, compose: viewCompose, respon
 function render() {
   const active = document.activeElement;
   const keep = focusKey || active?.dataset?.focus || null;
-  $app.innerHTML = `<a class="skip-link" href="#main" data-act="skip">Skip to main content</a>` + header() + views[S.view]().replace('<main class=', '<main id="main" tabindex="-1" class=') + (S.display ? displayDialog() : '') + `<footer>Calshare · free days only, never times or details · <a href="https://github.com/nbinding/calshare">Source</a></footer>`;
+  shownStep = 0;
+  const main = views[S.view]().replace('<main class=', '<main id="main" tabindex="-1" class=');
+  $app.innerHTML = `<a class="skip-link" href="#main" data-act="skip">Skip to main content</a><div class="app-shell">${sidebar()}<div class="main-shell">${header()}${main}<footer>Calshare · free days only, never times or details · <a href="https://github.com/nbinding/calshare">Source</a></footer></div></div>` + (S.display ? displayDialog() : '');
   if (keep) document.querySelector(`[data-focus="${keep}"]`)?.focus({ preventScroll: true });
   document.body.classList.toggle('dialog-open', !!S.display);
   if (S.display && !document.querySelector('.dialog')?.contains(document.activeElement)) document.querySelector('.dialog [data-focus=close-display]')?.focus();
