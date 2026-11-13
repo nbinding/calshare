@@ -108,7 +108,8 @@ function displayDialog() {
 }
 
 // ---------- Rendering pieces ----------
-const brand = () => `<a class="brand" href="${h(baseUrl())}" data-act="home"><span class="brand-mark">c</span>calshare<span class="brand-period">.</span></a>`;
+const markSvg = `<svg class="brand-mark" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="7" fill="currentColor"/><path d="M7 19 19 7M7 13l6-6M13 19l6-6" stroke="var(--surface)" stroke-width="1.6" stroke-linecap="round"/><path d="M7 7l12 12M13 7l6 6M7 13l6 6" stroke="var(--surface)" stroke-width="1.6" stroke-linecap="round" opacity=".45"/></svg>`;
+const brand = () => `<a class="brand" href="${h(baseUrl())}" data-act="home" aria-label="Calshare, your plans">${markSvg}<span>calshare</span></a>`;
 
 function crumb() {
   if (S.view === 'home') return 'Home';
@@ -122,6 +123,7 @@ function header() {
     ${brand()}
     <div class="breadcrumb">Calshare <span aria-hidden="true">/</span> <strong>${h(crumb())}</strong></div>
     <div class="top-actions">
+      ${S.view !== 'home' && Object.keys(loadStore().plans).length ? `<a class="chip-button" href="${h(baseUrl())}" data-act="home">Your plans</a>` : ''}
       <button class="chip-button" data-act="open-display" data-focus="open-display" aria-label="Display and accessibility settings" aria-haspopup="dialog">${icon.settings}<span>Display</span></button>
     </div>
   </header>`;
@@ -184,14 +186,9 @@ function banners() {
 }
 
 // Calendar. mode: 'edit' (paint my days), 'pick' (choose among overlaps), 'view'
-function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 'edit', readonly = false, counts = null }) {
+function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 'edit', readonly = false, counts = null, lead: intro = '' }) {
   const p = S.plan, months = rangeMonths(p.start, p.count), today = todayIso();
   const idx = Math.min(S.monthIdx, months.length - 1), mo = months[idx];
-  const count = (m, src) => Object.keys(src).filter(d => monthOf(d) === m).length;
-  const tabs = months.length > 1 ? `<div class="month-tabs" role="tablist">${months.map((m, i) => {
-    const n = mode === 'pick' ? count(m, allowed || {}) : count(m, mine);
-    return `<button role="tab" aria-selected="${i === idx}" data-act="month" data-i="${i}">${h(formatMonth(m).split(' ')[0].slice(0, 3))}${n ? `<small>${n}</small>` : ''}</button>`;
-  }).join('')}</div>` : '';
   const lead = weekdayIndex(`${mo}-01`);
   const cells = [];
   for (let i = 0; i < lead; i++) cells.push('<span class="cell blank" aria-hidden="true"></span>');
@@ -224,51 +221,34 @@ function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 
     const tags = counts?.[iso] || (tagsOf(tagMask) ? TAGS.filter(x => tagMask & x.bit).map(x => x.label[0]).join('') : '');
     cells.push(`<button class="${cls.join(' ')}" data-act="day" data-day="${iso}" data-focus="day-${iso}" ${disabled ? 'disabled' : ''} ${pressed != null ? `aria-pressed="${pressed}"` : ''} aria-label="${h(label)}"><span class="wd" aria-hidden="true">${iso === today ? 'Today' : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekdayIndex(iso)]}</span><span class="num">${d}</span>${tags ? `<span class="tags">${tags}</span>` : ''}${unsure ? '<span class="q" aria-hidden="true">?</span>' : ''}</button>`);
   }
-  return `<div class="calendar">
-    ${tabs}
+  const [mName, mYear] = formatMonth(mo).split(' ');
+  return `<div class="calendar ${mode}">
     <div class="month-head">
-      <button class="icon-button" data-act="month" data-i="${idx - 1}" ${idx === 0 ? 'disabled' : ''} aria-label="Previous month">${icon.left}</button>
-      <h3 aria-live="polite">${h(formatMonth(mo))}</h3>
-      <button class="icon-button" data-act="month" data-i="${idx + 1}" ${idx === months.length - 1 ? 'disabled' : ''} aria-label="Next month">${icon.right}</button>
+      <h3 aria-live="polite">${h(mName)} <span class="month-year">${h(mYear || '')}</span></h3>
+      <span class="month-nav">
+        <button class="icon-button" data-act="month" data-i="${idx - 1}" ${idx === 0 ? 'disabled' : ''} aria-label="Previous month">${icon.left}</button>
+        <button class="icon-button" data-act="month" data-i="${idx + 1}" ${idx === months.length - 1 ? 'disabled' : ''} aria-label="Next month">${icon.right}</button>
+      </span>
     </div>
-    <div class="grid weekdays" aria-hidden="true">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => `<span>${w}</span>`).join('')}</div>
+    ${intro ? `<p class="cal-lead">${intro}</p>` : ''}
+    <div class="grid weekdays" aria-hidden="true">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(w => `<span>${w}</span>`).join('')}</div>
     <div class="grid days">${cells.join('')}</div>
   </div>`;
 }
 
-const HINT_KEY = 'calshare-hint-marking';
-function hintDismissed() { try { return localStorage.getItem(HINT_KEY) === 'done'; } catch { return false; } }
-
-// A small picture of a day square, used in the marking guide.
-const mini = (n, { on = false, tags = '', maybe = false } = {}) =>
-  `<span class="mini-cell${on ? ' on' : ''}${maybe ? ' maybe' : ''}" aria-hidden="true"><span>${n}</span>${tags ? `<small>${tags}</small>` : ''}${maybe ? '<i>?</i>' : ''}</span>`;
-const arrow = '<span class="mini-arrow" aria-hidden="true">→</span>';
-
-function markingGuide() {
-  if (hintDismissed() && !S.showHint) return `<button class="text-button hint-open" data-act="hint-open">How marking days works</button>`;
-  const chips = on => `<span class="mini-chips" aria-hidden="true">${['Any', 'M', 'A', 'E'].map(c => `<span class="${c === on ? 'on' : ''}">${c}</span>`).join('')}</span>`;
-  return `<aside class="hint" aria-labelledby="hint-h">
-    <h3 id="hint-h">How to mark your days</h3>
-    <ol>
-      <li class="wide"><div class="hint-pic cycle">${mini(14, { on: true })}${arrow}${mini(14, { on: true, tags: 'M' })}${arrow}${mini(14, { on: true, tags: 'A' })}${arrow}${mini(14, { on: true, tags: 'E' })}${arrow}${mini(14)}</div>
-        <p><strong>Keep tapping a day to change its time:</strong> once for all day, twice for morning, three times for afternoon, four for evening. A fifth tap clears it.</p></li>
-      <li><div class="hint-pic">${chips('M')}</div>
-        <p><strong>Need more than one time on a day?</strong> Use "Your days" under the calendar: each day has its own buttons, so it can be morning and evening (ME).</p></li>
-      <li><div class="hint-pic">${mini(14, { on: true })}${mini(15, { maybe: true })}</div>
-        <p><strong>Not sure yet?</strong> Choose <em>Maybe</em> for that day in "Your days". It shows with a dotted outline and a ?, and still counts as a possible match.</p></li>
-    </ol>
-    <p class="small hint-key"><strong>M</strong> morning · <strong>A</strong> afternoon · <strong>E</strong> evening · no letter means any time</p>
-    <button class="secondary hint-done" data-act="hint-done">Got it</button>
-  </aside>`;
+// One short line instead of a guide panel: tapping cycles times; holding (or the button, for keyboards) opens the sheet.
+function tapHint(mine) {
+  const n = futureDays(mine, todayIso()).length;
+  return `<div class="tap-hint"><p>Tap a day again for morning, afternoon or evening. Hold it for maybe, or more than one time.</p>
+    ${n ? `<button class="text-button" data-act="open-sheet" data-focus="open-sheet">Times and maybes</button>` : ''}</div>`;
 }
 
-// Per-day times: one row per marked day, each with its own buttons.
-function dayTimes(mine, theirs = null, theirName = '') {
-  const days = futureDays(mine, todayIso());
-  if (!days.length) return `<p class="small day-times-empty">Days you mark will appear here, so you can set a time for each one.</p>`;
+// Per-day times, shown in the bottom sheet: one row per day, each with its own buttons.
+function dayTimes(mine, days, theirs = null, theirName = '') {
   const opts = [{ bit: 0, label: 'Any time' }, ...TAGS];
-  return `<div class="day-times"><h3>Your days <span class="small">· set a time for each</span></h3><ul>${days.map(iso => {
-    const m = mine[iso], short = formatDay(iso, { weekday: 'short', day: 'numeric', month: 'short' });
+  if (!days.length) return '<p class="small">Mark some days first, then set a time for each one here.</p>';
+  return `<ul class="day-times">${days.map(iso => {
+    const m = mine[iso] || FREE, short = formatDay(iso, { weekday: 'short', day: 'numeric', month: 'short' });
     const t = theirs && theirs[iso] ? `<small>${h(theirName)}: ${h(timeWords(theirs[iso]))}</small>` : '';
     return `<li><div class="dt-head"><strong>${h(short)}</strong>${t}<button class="dt-remove" data-act="remove-day" data-day="${iso}" aria-label="Remove ${h(formatDay(iso))}">${icon.close}</button></div>
       <div class="dt-chips" role="group" aria-label="Time on ${h(formatDay(iso))}">${opts.map(o => {
@@ -279,7 +259,22 @@ function dayTimes(mine, theirs = null, theirName = '') {
         <button data-act="sure" data-day="${iso}" data-maybe="0" data-focus="sure-${iso}-0" aria-pressed="${!isMaybe(m)}">Free</button>
         <button data-act="sure" data-day="${iso}" data-maybe="1" data-focus="sure-${iso}-1" aria-pressed="${isMaybe(m)}"><span class="q-mini" aria-hidden="true">?</span>Maybe</button>
       </div></li>`;
-  }).join('')}</ul></div>`;
+  }).join('')}</ul>`;
+}
+
+// Bottom sheet for one day (opened by holding it) or every marked day (from the button).
+function sheet() {
+  const p = S.plan, mine = myDays(), theirs = S.role === 'a' ? p.b?.days : p.a.days;
+  const theirName = S.role === 'a' ? nameOf(p, 'b', 'They') : nameOf(p, 'a', 'They');
+  const days = S.sheet === 'all' ? futureDays(mine, todayIso()) : (mine[S.sheet] ? [S.sheet] : []);
+  const title = S.sheet === 'all' ? 'Times and maybes' : formatDay(S.sheet);
+  return `<div class="backdrop" data-act="close-sheet"></div>
+  <div class="sheet ${S.sheet === 'all' ? '' : 'single'}" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <h2 id="sheet-h">${h(title)}</h2>
+    ${dayTimes(mine, days, theirs, theirName)}
+    <button class="primary wide" data-act="close-sheet" data-focus="sheet-done">Done</button>
+  </div>`;
 }
 
 function quickActions() {
@@ -288,11 +283,16 @@ function quickActions() {
 
 function legend(withTheirs, theirName) {
   return `<ul class="legend" aria-label="Key">
-    <li><span class="swatch mine"></span>You're free</li>
-    <li><span class="swatch maybe">?</span>Maybe, not confirmed</li>
-    ${withTheirs ? `<li><span class="swatch theirs"></span>${h(theirName)} is free</li><li><span class="swatch both"></span>Both free</li>` : ''}
-    <li><span class="swatch tagkey">MAE</span>Morning, afternoon, evening</li>
+    ${withTheirs ? `<li><span class="swatch theirs"></span>${h(theirName)}</li>` : ''}
+    <li><span class="swatch mine"></span>${withTheirs ? 'You' : 'Free'}</li>
+    ${withTheirs ? '<li><span class="swatch both"></span>Both of you</li>' : ''}
+    <li><span class="swatch maybe">?</span>Maybe</li>
   </ul>`;
+}
+
+// Sticky summary at the bottom of the calendar screens: the count, a hint, and the one next action.
+function dock(summary, detail, button) {
+  return `<div class="dock"><div class="dock-row"><strong>${summary}</strong>${detail ? `<span>${detail}</span>` : ''}</div>${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}${button}</div>`;
 }
 
 function dayList(days, { picked = null, radio = false, name = 'day', act = null } = {}) {
@@ -317,22 +317,34 @@ function sharePanel() {
   const canShare = typeof navigator.share === 'function';
   const title = step === 4 ? (p.group ? 'Send it to everyone' : 'Send the confirmation') : p.group && step === 1 ? 'Send it to everyone you\'re inviting' : `Send it to ${h(other)}`;
   const long = link.length > 1800 ? `<p class="small warn">This link is ${link.length} characters long. Most apps cope, but if it arrives broken, mark fewer days or months.</p>` : '';
-  return `<section class="card share" aria-labelledby="share-h">
-    <h2 id="share-h">${title}</h2>
-    <p class="small">${p.group && step === 1 ? 'Send the same link to each person, or paste it into a group chat. Everyone replies to you separately.' : 'Paste this into any chat app. You can edit the words first.'}</p>
+  const twoBeats = step === 1 && S.role === 'a';
+  const preview = text.split('\n').filter(l => !l.includes(link)).join('\n').replace(/:\n/g, '.\n').replace(/:$/, '.');
+  const send = `<button class="primary wide" data-act="${canShare ? 'native-share' : 'copy-message'}">${canShare ? icon.share + 'Send the link' : icon.copy + 'Copy the message'}</button>`;
+  return `<section class="share" aria-labelledby="share-h">
+    <h2 id="share-h" class="sr-only">${title}</h2>
     ${S.sent.code ? `<p class="reply-code">Your reply code: <strong>${h(S.sent.code)}</strong> <span class="small">If someone else in the group has your name, this tells ${h(nameOf(p, 'a', 'the organiser'))} which reply is yours.</span></p>` : ''}
-    <label class="sr-only" for="msg">Message</label>
-    <textarea id="msg" rows="6" data-input="message">${h(text)}</textarea>
-    <div class="actions">
-      ${canShare ? `<button class="primary" data-act="native-share">${icon.share}Share…</button>` : ''}
-      <button class="${canShare ? 'secondary' : 'primary'}" data-act="copy-message">${icon.copy}Copy message</button>
-      <button class="secondary" data-act="copy-link">${icon.copy}Copy link only</button>
+    <div class="beat">
+      <p class="beat-head">${twoBeats ? '<span class="beat-n">1</span>' : ''}${twoBeats ? 'Your days' : p.group && step === 1 ? 'Send the same link to each person, or to a group chat' : `Send it to ${h(other)}`}</p>
+      <p class="preview">${h(preview)}</p>
+      ${send}
     </div>
-    ${linkField(link)}
-    ${long}
-    ${step === 1 && S.role === 'a' ? `<div class="passbox"><span class="eyebrow">Passphrase</span><code>${h(S.pass)}</code><button class="text-button" data-act="copy-pass">${icon.copy}Copy</button>
-      <p class="small">Send this separately, for example in a different app or out loud. Anyone with both the link and the passphrase can open the plan.</p></div>` : ''}
+    ${twoBeats ? `<div class="beat">
+      <p class="beat-head"><span class="beat-n">2</span>The words that open it</p>
+      <p class="words">${h(S.pass)}</p>
+      <p class="small">Send these in a separate message, or just say them. Anyone with the link and these words can open the plan.</p>
+      <button class="secondary wide" data-act="copy-pass">${icon.copy}Copy the words</button>
+    </div>` : ''}
     ${step === 4 ? `<button class="secondary wide" data-act="ics">${icon.cal}Add to my calendar</button>` : ''}
+    <details class="more"><summary>Edit the message</summary>
+      <label class="sr-only" for="msg">Message</label>
+      <textarea id="msg" rows="6" data-input="message">${h(text)}</textarea>
+      <button class="secondary wide" data-act="copy-message">${icon.copy}Copy message</button>
+    </details>
+    <details class="more"><summary>Show the link</summary>
+      ${linkField(link)}
+      <button class="secondary wide" data-act="copy-link">${icon.copy}Copy link only</button>
+    </details>
+    ${long}
   </section>`;
 }
 
@@ -386,67 +398,56 @@ function viewUnlock() {
 
 function viewCompose() {
   const p = S.plan, mine = p.a.days, n = futureDays(mine, todayIso()).length;
-  const theirs = p.b?.days || {};
-  const startOpts = [0, 1, 2].map(i => addMonths(monthOf(todayIso()), i));
-  const steps = p.group ? 3 : 4;
-  if (S.sent) return `<main class="page">${stepper(p, 1)}${banners()}<p class="eyebrow">Step 1 of ${steps}</p><h1>Your ${S.editing ? 'new ' : ''}link is <em>ready.</em></h1>${sharePanel()}
+  const theirs = p.b?.days || {}, B = nameOf(p, 'b', 'They');
+  if (S.sent) return `<main class="page">${stepper(p, 1)}${banners()}<h1>${S.editing ? 'Your new link.' : 'Two things to send.'}</h1>${sharePanel()}
     <button class="text-button" data-act="unsend">${icon.left}Change my days</button></main>`;
-  return `<main class="page">
+  if (S.details) return `<main class="page narrow details">
     ${stepper(p, 1)}${banners()}
-    <p class="eyebrow">Step 1 of ${steps}${S.editing ? ' · Editing' : ''}</p>
-    <h1>When are <em>you free?</em></h1>
-    <section class="card">
-      <label class="field"><span>Your name</span><input data-input="a-name" value="${h(p.a.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Sam"></label>
-      <label class="field"><span>What's it for? <small>Optional</small></span><input data-input="title" value="${h(p.title)}" maxlength="80" placeholder="e.g. Dinner, a call, the hike"></label>
-      ${p.b || S.editing ? '' : `<div class="field"><span id="who-l">Who's it for?</span><div class="segmented" role="radiogroup" aria-labelledby="who-l">
-        <button role="radio" aria-checked="${!p.group}" data-act="group" data-on="0">One person</button><button role="radio" aria-checked="${!!p.group}" data-act="group" data-on="1">A group</button></div>
-        ${p.group ? '<p class="small">Everyone gets the same link and sends their days back to you. You then lock in the day that suits the most people.</p>' : ''}</div>`}
-      ${p.b || S.editing ? '' : `<div class="field-row">
-        <label class="field"><span>Starting</span><select data-input="start">${startOpts.map(m => `<option value="${m}" ${m === p.start ? 'selected' : ''}>${h(formatMonth(m))}</option>`).join('')}</select></label>
-        <div class="field"><span id="span-l">Months</span><div class="segmented" role="radiogroup" aria-labelledby="span-l">${[1, 2, 3].slice(0, MAX_MONTHS).map(c => `<button role="radio" aria-checked="${p.count === c}" data-act="count" data-c="${c}">${c}</button>`).join('')}</div></div>
-      </div>`}
-    </section>
-    <section class="card">
-      <h2>Your free days <span class="count">${plural(n, 'day')}</span></h2>
-      ${markingGuide()}
-      ${calendar({ mine, theirs })}
-      ${quickActions()}
-      ${legend(!!p.b, nameOf(p, 'b', 'They'))}
-      ${dayTimes(mine, p.b?.days, nameOf(p, 'b', 'They'))}
-    </section>
-    <section class="card">
-      <h2>Lock it with a passphrase</h2>
-      <p class="small">${S.editing ? 'Keep the same passphrase so they don\'t need a new one.' : `${p.group ? 'Everyone' : 'They'}'ll need this to open the link. Use the suggestion or type your own.`}</p>
-      <div class="pass-row"><input aria-label="Passphrase" data-input="pass" value="${h(S.pass)}" autocapitalize="none" spellcheck="false"><button class="icon-button" data-act="reroll" aria-label="Suggest new words">${icon.dice}</button></div>
-      ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
-      <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.lock}${S.busy ? 'Locking…' : S.editing ? 'Create my new link' : 'Create my link'}</button>
-    </section>
+    <button class="text-button back" data-act="back-cal">${icon.left}Your days</button>
+    <p class="context">${plural(n, 'day')} free${p.title ? ` · ${h(p.title)}` : ''}</p>
+    <h1>${S.editing ? 'Send the update.' : 'Almost there.'}</h1>
+    <label class="field"><span>Your name</span><input data-input="a-name" value="${h(p.a.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Sam"></label>
+    <label class="field"><span>What's it for? <small>Optional</small></span><input data-input="title" value="${h(p.title)}" maxlength="80" placeholder="Dinner, a call, the hike"></label>
+    ${p.b || S.editing ? '' : `<div class="field"><span id="who-l">Who's it for?</span><div class="segmented" role="radiogroup" aria-labelledby="who-l">
+      <button role="radio" aria-checked="${!p.group}" data-act="group" data-on="0">One person</button><button role="radio" aria-checked="${!!p.group}" data-act="group" data-on="1">A group</button></div>
+      ${p.group ? '<p class="small">Everyone gets the same link and sends their days back to you. Then you lock in the day that suits most people.</p>' : ''}</div>`}
+    <div class="field"><span id="pass-l">The words that open it</span>
+      <div class="pass-row"><input aria-labelledby="pass-l" data-input="pass" value="${h(S.pass)}" autocapitalize="none" spellcheck="false"><button class="icon-button" data-act="reroll" aria-label="Suggest new words">${icon.dice}</button></div>
+      <p class="small">${S.editing ? 'Keep the same words so they don\'t need new ones.' : `${p.group ? 'Everyone' : 'They'}'ll need these to open the link. You send them separately.`}</p></div>
+    ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
+    <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.lock}${S.busy ? 'Locking…' : S.editing ? 'Create my new link' : 'Create my link'}</button>
+  </main>`;
+  return `<main class="page compose">
+    ${stepper(p, 1)}${banners()}
+    ${S.editing ? '<p class="context">Editing your days</p>' : ''}
+    <h1 class="sr-only">When are you free?</h1>
+    ${calendar({ mine, theirs, lead: p.b ? `${h(B)}'s days are hatched the other way.` : "Tap the days you're free." })}
+    ${tapHint(mine)}
+    ${quickActions()}
+    ${p.b ? legend(true, B) : ''}
+    ${dock(n ? plural(n, 'day') + ' free' : 'No days yet', n ? '' : 'Tap a day to start', `<button class="primary wide" data-act="details">${S.editing ? 'Next' : 'Send to someone'}${icon.right}</button>`)}
   </main>`;
 }
 
 function viewRespond() {
   const p = S.plan, A = nameOf(p, 'a', 'They'), today = todayIso();
   const theirs = futureDays(p.a.days, today);
-  const both = futureDays(overlap(p.a.days, p.b.days), today).length;
-  const steps = p.group ? 3 : 4;
-  if (S.sent) return `<main class="page">${stepper(p, 2)}${banners()}<p class="eyebrow">Step 2 of ${steps}</p><h1>Send it <em>back.</em></h1>${sharePanel()}
+  const matches = futureDays(overlap(p.a.days, p.b.days), today);
+  if (S.sent) return `<main class="page">${stepper(p, 2)}${banners()}<h1>Send it <em>back.</em></h1>${sharePanel()}
     <button class="text-button" data-act="unsend">${icon.left}Change my days</button></main>`;
-  return `<main class="page">
+  const short = d => `${formatDay(d, { weekday: 'short' })} ${parseIso(d).getUTCDate()}`;
+  const list = matches.slice(0, 3).map(short).join(', ') + (matches.length > 3 ? '…' : '');
+  return `<main class="page respond">
     ${stepper(p, 2)}${banners()}
-    <p class="eyebrow">Step 2 of ${steps} · ${S.editing ? 'Editing' : 'Your turn'}</p>
-    <h1>${h(A)} is free on <em>${plural(theirs.length, 'day')}.</em></h1>
-    <p class="lead">${p.title ? `For <strong>${h(p.title)}</strong>. ` : ''}${p.group ? `${h(A)} has invited a few people. Only ${h(A)} sees your reply. ` : ''}Their days have a dashed outline. Mark the days you're free too, and the ones you share are ringed.</p>
-    <section class="card"><label class="field"><span>Your name</span><input data-input="b-name" value="${h(p.b.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Alex"></label></section>
-    <section class="card">
-      <h2>Your free days <span class="count">${both ? `${plural(both, 'match')}` : 'No matches yet'}</span></h2>
-      ${markingGuide()}
-      ${calendar({ mine: p.b.days, theirs: p.a.days })}
-      ${quickActions()}
-      ${legend(true, A)}
-      ${dayTimes(p.b.days, p.a.days, A)}
-    </section>
-    ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
-    <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.share}${S.busy ? 'Locking…' : `Send my ${S.editing ? 'new ' : ''}days to ${h(A)}`}</button>
+    <p class="context">${p.title ? `${h(p.title)} with ${h(A)}` : `From ${h(A)}`}${S.editing ? ' · Editing' : ''}</p>
+    <h1>When can you?</h1>
+    ${p.group ? `<p class="small">${h(A)} has invited a few people. Only ${h(A)} sees your reply.</p>` : ''}
+    ${calendar({ mine: p.b.days, theirs: p.a.days, lead: `${h(A)} is free on ${plural(theirs.length, 'day')}. Tap the ones you can do.` })}
+    ${tapHint(p.b.days)}
+    ${quickActions()}
+    ${legend(true, A)}
+    <label class="field name-field"><span>Your name</span><input data-input="b-name" value="${h(p.b.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Alex"></label>
+    ${dock(matches.length ? `${plural(matches.length, 'day')} match` : 'No matches yet', h(list), `<button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Locking…' : `Send ${S.editing ? 'my new days' : 'back'} to ${h(A)}`}${icon.right}</button>`)}
   </main>`;
 }
 
@@ -533,6 +534,7 @@ function viewCollect() {
   </main>`;
 }
 
+// The settled plan as a poster: the date is the hero.
 function finalCard() {
   const p = S.plan, finals = p.finals || [];
   const people = p.group ? (p.people || []) : [], labels = labelPeople(people);
@@ -540,10 +542,13 @@ function finalCard() {
   const rows = finals.map(iso => {
     const dt = parseIso(iso), note = dayNote(p, iso) || 'any time';
     const going = p.group ? [p.a.name, ...(groupDays({ [iso]: p.a.days[iso] || FREE }, people)[iso]?.free || []).map(id => labels[id])].filter(Boolean) : [];
-    return `<li><div class="tear"><span>${h(dt.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }))}</span><strong>${dt.getUTCDate()}</strong></div>
-      <div><h2>${h(formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2><p class="small">${h(note[0].toUpperCase() + note.slice(1))}</p>${going.length ? `<p class="small">${h(going.join(', '))}</p>` : ''}</div></li>`;
+    return `<li><h2 class="sr-only">${h(formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
+      <span class="poster-wd" aria-hidden="true">${h(formatDay(iso, { weekday: 'long' }))}</span>
+      <span class="poster-day" aria-hidden="true">${dt.getUTCDate()}</span>
+      <span class="poster-month" aria-hidden="true">${h(formatDay(iso, { month: 'long', year: 'numeric' }))}</span>
+      <p class="poster-note">${h(note[0].toUpperCase() + note.slice(1))}</p>${going.length ? `<p class="poster-note">${h(going.join(', '))}</p>` : ''}</li>`;
   }).join('');
-  return `<div class="final-card"><p class="eyebrow">${h(p.title || 'Meeting')}${finals.length > 1 ? ` · ${finals.length} days` : ''}${who ? ` · ${h(who)}` : ''}</p><ul>${rows}</ul></div>`;
+  return `<div class="final-card ${finals.length > 1 ? 'multi' : ''}"><p class="poster-what">${h(p.title || 'Meeting')}${who ? ` · ${h(who)}` : ''}</p><ul>${rows}</ul><div class="poster-hatch" aria-hidden="true"></div></div>`;
 }
 
 function viewDone() {
@@ -590,9 +595,10 @@ function render() {
   const keep = focusKey || active?.dataset?.focus || null;
   shownStep = 0;
   const main = views[S.view]().replace('<main class=', '<main id="main" tabindex="-1" class=');
-  $app.innerHTML = `<a class="skip-link" href="#main" data-act="skip">Skip to main content</a><div class="app-shell">${sidebar()}<div class="main-shell">${header()}${main}<footer>Calshare · free days only, never times or details · <a href="https://github.com/nbinding/calshare">Source</a></footer></div></div>` + (S.display ? displayDialog() : '');
+  $app.innerHTML = `<a class="skip-link" href="#main" data-act="skip">Skip to main content</a><div class="app-shell">${sidebar()}<div class="main-shell">${header()}${main}<footer>Calshare · free days only, never times or details · <a href="https://github.com/nbinding/calshare">Source</a></footer></div></div>` + (S.display ? displayDialog() : '') + (S.sheet && S.plan ? sheet() : '');
   if (keep) document.querySelector(`[data-focus="${keep}"]`)?.focus({ preventScroll: true });
-  document.body.classList.toggle('dialog-open', !!S.display);
+  document.body.classList.toggle('dialog-open', !!(S.display || S.sheet));
+  if (S.sheet && !document.querySelector('.sheet')?.contains(document.activeElement)) document.querySelector('.sheet [data-focus=sheet-done]')?.focus();
   if (S.display && !document.querySelector('.dialog')?.contains(document.activeElement)) document.querySelector('.dialog [data-focus=close-display]')?.focus();
   focusKey = null;
 }
@@ -619,9 +625,9 @@ async function copy(text, msg = 'Copied') {
 // ---------- Flow ----------
 function startNew() {
   const start = monthOf(todayIso());
-  const plan = { id: randomId(), step: 1, created: 0, title: '', start, count: 2, group: false, a: { name: '', days: {}, v: 0 }, picks: [] };
+  const plan = { id: randomId(), step: 1, created: 0, title: '', start, count: MAX_MONTHS, group: false, a: { name: '', days: {}, v: 0 }, picks: [] };
   history.replaceState(null, '', baseUrl());
-  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, monthIdx: 0, choices: [], editing: false, people: [], invite: null });
+  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, monthIdx: 0, choices: [], editing: false, people: [], invite: null, details: false, sheet: null });
   scrollTo(0, 0);
 }
 
@@ -697,7 +703,7 @@ function enterPlan(plan, role, pass, hash) {
   const first = focusDays.filter(d => d >= today).sort()[0] || today;
   const monthIdx = Math.max(0, months.indexOf(monthOf(first)));
   const choices = view === 'confirm' && work.picks.length === 1 ? [...work.picks] : [];
-  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, monthIdx, choices, notice, editing: false, people, invite: inviteHash });
+  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, monthIdx, choices, notice, editing: false, people, invite: inviteHash, details: false, sheet: null });
   scrollTo(0, 0);
 }
 
@@ -709,9 +715,11 @@ async function tryOpen(hash, pass) {
   return plan;
 }
 
+let routedOnce = false; // a fresh visit opens straight on the calendar; the brand link shows your plans
 async function route() {
   const hash = decodeURIComponent(location.hash.slice(1));
-  if (!hash) { set({ view: 'home', plan: null, sent: null, error: '', newer: null, notice: '' }); return; }
+  if (!hash) { if (!routedOnce || S.view !== 'home') startNew(); routedOnce = true; return; }
+  routedOnce = true;
   if (!/^[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{40,}$/.test(hash)) {
     set({ view: 'home', notice: '' }); toast("That link looks incomplete. Ask for it to be sent again."); return;
   }
@@ -743,7 +751,7 @@ async function send() {
   let next = clone(p);
   if (S.view === 'compose') {
     if (!p.a.name.trim()) return set({ error: 'Add your name so they know who it is from.' });
-    if (!futureDays(p.a.days, today).length) return set({ error: 'Mark at least one day you are free.' });
+    if (!futureDays(p.a.days, today).length) return set({ error: 'Mark at least one day you are free.', details: false });
     if (S.pass.trim().length < 6) return set({ error: 'Use a passphrase of at least 6 characters.' });
     next.step = 1; next.picks = []; delete next.finals; delete next.people;
     if (next.group) delete next.b;
@@ -797,7 +805,7 @@ function revise() {
 // Change a link that was already sent: reopen the step that made it, filled in, and send a new link.
 function edit() {
   const p = clone(S.plan), r = S.role;
-  const base = { plan: p, sent: null, error: '', notice: '', editing: true };
+  const base = { plan: p, sent: null, error: '', notice: '', editing: true, details: false, sheet: null };
   if (p.step === 4 && p.group) { p.picks = [...(p.finals || [])]; delete p.finals; set({ ...base, view: 'collect' }); }
   else if (p.step === 4) { const finals = p.finals || []; delete p.finals; set({ ...base, view: 'confirm', choices: [...finals] }); }
   else if (p.step === 3) set({ ...base, view: 'pick' });
@@ -834,14 +842,13 @@ $app.addEventListener('click', e => {
     case 'reset-display': prefs = { ...defaultPrefs }; applyPrefs(); focusKey = 'close-display'; render(); toast('Display settings reset'); break;
     case 'new': startNew(); break;
     case 'time': { const d = myDays(), iso = el.dataset.day; d[iso] = setTime(d[iso] || FREE, Number(el.dataset.bit)); focusKey = el.dataset.focus; render(); break; }
-    case 'remove-day': delete myDays()[el.dataset.day]; render(); break;
+    case 'remove-day': delete myDays()[el.dataset.day]; if (S.sheet && S.sheet !== 'all') { focusKey = `day-${S.sheet}`; S.sheet = null; } render(); break;
     case 'sure': { const d = myDays(), iso = el.dataset.day; d[iso] = setMaybe(d[iso] || FREE, el.dataset.maybe === '1'); focusKey = el.dataset.focus; render(); break; }
-    case 'hint-done': try { localStorage.setItem(HINT_KEY, 'done'); } catch {} focusKey = null; set({ showHint: false }); document.querySelector('[data-act=hint-open]')?.focus(); break;
-    case 'hint-open': set({ showHint: true }); document.querySelector('.hint-done')?.focus(); break;
     case 'count': p.count = Number(el.dataset.c); trimToRange(); set({ monthIdx: Math.min(S.monthIdx, p.count - 1) }); break;
     case 'month': { const i = Number(el.dataset.i); if (i >= 0 && i < p.count) set({ monthIdx: i }); break; }
     case 'day': {
       const iso = el.dataset.day;
+      if (heldDay === iso) { heldDay = null; break; } // the hold already opened the sheet
       focusKey = `day-${iso}`;
       if (S.view === 'pick' || S.view === 'collect') { const i = p.picks.indexOf(iso); i >= 0 ? p.picks.splice(i, 1) : p.picks.push(iso); }
       else { const d = myDays(), m = cycle(d[iso] || 0); if (m) d[iso] = m; else delete d[iso]; }
@@ -857,6 +864,12 @@ $app.addEventListener('click', e => {
     case 'unsend': set({ sent: null }); break;
     case 'revise': revise(); break;
     case 'edit': edit(); break;
+    case 'details':
+      if (!futureDays(myDays(), todayIso()).length) { set({ error: 'Tap at least one day you are free.' }); break; }
+      set({ details: true, error: '' }); scrollTo(0, 0); break;
+    case 'back-cal': set({ details: false, error: '' }); scrollTo(0, 0); break;
+    case 'open-sheet': set({ sheet: 'all' }); break;
+    case 'close-sheet': focusKey = S.sheet === 'all' ? 'open-sheet' : `day-${S.sheet}`; set({ sheet: null }); break;
     case 'group': p.group = el.dataset.on === '1'; render(); break;
     case 'collect': set({ view: 'collect', sent: null, notice: '' }); scrollTo(0, 0); break;
     case 'show-invite': { const link = `${baseUrl()}#${S.invite}`; set({ view: 'waiting', plan: { ...clone(p), step: 1 }, sent: { link, text: draftMessage({ ...p, step: 1 }, link), step: 1 } }); scrollTo(0, 0); break; }
@@ -875,6 +888,30 @@ $app.addEventListener('click', e => {
     case 'open-newer': location.hash = S.newer; break;
     case 'show-pass': set({ showPass: el.checked }); break;
   }
+});
+
+// Holding a day (or right-clicking it) opens its sheet: time, maybe, remove. Tapping still cycles the time.
+let holdTimer = null, heldDay = null;
+const editingDays = () => ['compose', 'respond'].includes(S.view) && !S.sent && !S.details;
+function openDaySheet(iso, fromHold) {
+  const d = myDays();
+  if (!d[iso]) d[iso] = FREE;
+  heldDay = fromHold ? iso : null; // a hold is followed by a click on release, which must not also cycle the day
+  set({ sheet: iso, error: '' });
+}
+$app.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.calendar.edit [data-act=day]');
+  if (!el || el.disabled || !editingDays()) return;
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => openDaySheet(el.dataset.day, true), 480);
+});
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel', 'scroll']) $app.addEventListener(ev, () => clearTimeout(holdTimer), true);
+$app.addEventListener('pointerup', () => { if (heldDay) setTimeout(() => { heldDay = null; }, 0); });
+$app.addEventListener('contextmenu', e => {
+  const el = e.target.closest('.calendar.edit [data-act=day]');
+  if (!el || el.disabled || !editingDays()) return;
+  e.preventDefault(); clearTimeout(holdTimer);
+  if (S.sheet !== el.dataset.day) openDaySheet(el.dataset.day);
 });
 
 $app.addEventListener('change', e => {
@@ -913,10 +950,14 @@ function trimToRange() {
 }
 
 addEventListener('keydown', e => {
-  if (!S.display) return;
-  if (e.key === 'Escape') { focusKey = 'open-display'; set({ display: false }); return; }
-  if (e.key === 'Tab') { // keep focus inside the dialog
-    const f = [...document.querySelectorAll('.dialog button, .dialog input')];
+  if (!S.display && !S.sheet) return;
+  if (e.key === 'Escape') {
+    if (S.display) { focusKey = 'open-display'; set({ display: false }); }
+    else { focusKey = S.sheet === 'all' ? 'open-sheet' : `day-${S.sheet}`; set({ sheet: null }); }
+    return;
+  }
+  if (e.key === 'Tab') { // keep focus inside the dialog or sheet
+    const f = [...document.querySelectorAll(S.display ? '.dialog button, .dialog input' : '.sheet button')];
     if (!f.length) return;
     if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f.at(-1).focus(); }
     else if (!e.shiftKey && document.activeElement === f.at(-1)) { e.preventDefault(); f[0].focus(); }

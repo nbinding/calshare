@@ -1,29 +1,27 @@
 // Editing after a link was sent, and keeping each person's latest days.
 import { test, expect } from '@playwright/test';
-import { freshPage, day } from './helpers.mjs';
+import { freshPage, day, startPlan, createLink } from './helpers.mjs';
 
 test('organiser edits after sending; a reply to the old link keeps the new days', async ({ browser }, info) => {
   const owner = await (await browser.newContext({ ...info.project.use })).newPage();
   const guest = await (await browser.newContext({ ...info.project.use })).newPage();
   const errors = [await freshPage(owner), await freshPage(guest)];
 
-  await owner.goto('/');
-  await owner.getByRole('button', { name: 'Start a plan', exact: true }).click();
-  await owner.fill('[data-input=a-name]', 'Sam');
+  await startPlan(owner);
   for (const d of ['2026-11-20', '2026-11-21']) await owner.click(day(d));
-  const pass = await owner.inputValue('[data-input=pass]');
-  await owner.click('[data-act=send]');
-  await expect(owner.locator('.share')).toBeVisible();
+  const pass = await createLink(owner, { name: 'Sam' });
   const oldLink = owner.url();
 
-  // Later: open the plan from the home screen and edit.
+  // Later: open the plan from your plans and edit.
   await owner.goto('/');
+  await owner.getByRole('link', { name: 'Your plans' }).first().click();
   await owner.locator('.plan-row a').click();
   await expect(owner.locator('h1')).toContainText('Over to');
   await owner.getByRole('button', { name: 'Edit my days' }).click();
-  await expect(owner.locator('.eyebrow').first()).toContainText('Editing');
-  await expect(owner.getByRole('radio', { name: 'A group' })).toHaveCount(0);
+  await expect(owner.locator('.context').first()).toContainText('Editing');
   await owner.click(day('2026-11-27'));
+  await owner.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(owner.getByRole('radio', { name: 'A group' })).toHaveCount(0);
   await owner.getByRole('button', { name: 'Create my new link' }).click();
   await expect(owner.locator('#msg')).toHaveValue(/^I've updated my days\. Please use this link instead of the one I sent before \(same passphrase\)/);
   expect(owner.url()).not.toBe(oldLink);
@@ -31,7 +29,7 @@ test('organiser edits after sending; a reply to the old link keeps the new days'
   // The guest still uses the old link and replies.
   await guest.goto(oldLink);
   await guest.fill('#pass', pass); await guest.click('button[type=submit]');
-  await expect(guest.locator('h1')).toContainText('Sam is free on 2 days');
+  await expect(guest.locator('.cal-lead')).toContainText('Sam is free on 2 days');
   await guest.fill('[data-input=b-name]', 'Alex');
   for (const d of ['2026-11-21', '2026-11-27']) await guest.click(day(d));
   await guest.click('[data-act=send]');
@@ -45,6 +43,7 @@ test('organiser edits after sending; a reply to the old link keeps the new days'
 
   // The guest can edit their reply too.
   await guest.goto('/');
+  await guest.getByRole('link', { name: 'Your plans' }).first().click();
   await guest.locator('.plan-row a').click();
   await guest.getByRole('button', { name: 'Edit my days' }).click();
   await expect(guest.locator(day('2026-11-21'))).toHaveAttribute('aria-pressed', 'true');
@@ -61,13 +60,9 @@ test('the guest can change the final days after confirming', async ({ browser },
   const owner = await (await browser.newContext({ ...info.project.use })).newPage();
   const guest = await (await browser.newContext({ ...info.project.use })).newPage();
   await freshPage(owner); await freshPage(guest);
-  await owner.goto('/');
-  await owner.getByRole('button', { name: 'Start a plan', exact: true }).click();
-  await owner.fill('[data-input=a-name]', 'Sam');
+  await startPlan(owner);
   for (const d of ['2026-11-20', '2026-11-21']) await owner.click(day(d));
-  const pass = await owner.inputValue('[data-input=pass]');
-  await owner.click('[data-act=send]');
-  await expect(owner.locator('.share')).toBeVisible();
+  const pass = await createLink(owner, { name: 'Sam' });
   await guest.goto(owner.url());
   await guest.fill('#pass', pass); await guest.click('button[type=submit]');
   await guest.fill('[data-input=b-name]', 'Alex');
@@ -84,6 +79,7 @@ test('the guest can change the final days after confirming', async ({ browser },
   await expect(guest.locator('.final-card li')).toHaveCount(1);
 
   await guest.goto('/');
+  await guest.getByRole('link', { name: 'Your plans' }).first().click();
   await guest.locator('.plan-row a').click();
   await guest.getByRole('button', { name: 'Change the final days' }).click();
   await expect(guest.locator('input[data-day="2026-11-20"]')).toBeChecked();

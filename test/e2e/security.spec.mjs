@@ -17,7 +17,7 @@ test('names and titles from a link are escaped', async ({ page }) => {
   await page.goto(`/#${hash}`);
   await page.fill('#pass', 'pass-word-here');
   await page.click('button[type=submit]');
-  await expect(page.locator('h1')).toContainText('<img src=x');
+  await expect(page.locator('.context')).toContainText('<img src=x');
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   expect(await page.locator('main img, main script').count()).toBe(0);
   expect(errors).toEqual([]);
@@ -43,7 +43,6 @@ test('the page makes no network requests after loading', async ({ page }) => {
   page.on('request', r => { if (!r.url().startsWith('http://localhost:4173/') && !r.url().startsWith('data:')) external.push(r.url()); });
   await freshPage(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start a plan', exact: true }).click();
   await page.click('[data-day="2026-11-20"]');
   expect(external).toEqual([]);
 });

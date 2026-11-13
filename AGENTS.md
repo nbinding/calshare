@@ -43,7 +43,8 @@ npm run test:e2e         # for any UI or flow change (Chromium is pre-installed 
 ## Style
 
 - Plain, friendly UK English in the UI ("organiser", sentence case, no jargon).
-- The visual language comes from stead-mobile: Georgia headings with a muted italic `<em>` accent, Arial body, 6px radii, 56px primary buttons, dark grey and white only. Show calendar states by shape, not colour alone.
+- Visual language: dark grey and white only. Bricolage Grotesque (display, dates) and Inter (body), self-hosted in `src/fonts/`. Your days hatch at 45°, theirs at -45°, shared days are solid, maybes add a dotted outline and "?". Show every state by shape, not colour alone. Few boxes: structure with space and type. 60px primary buttons, 44px minimum tap targets.
+- The app opens on the calendar; details are asked at send time. Calendar screens end with the sticky `.dock` (count and one next action). Holding a day, right-clicking it or the **Times and maybes** button opens the bottom sheet.
 - Keep functions small and code compact, following the existing style. Comments explain *why*, not *what*.
 
 ## Git

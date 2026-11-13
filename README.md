@@ -7,6 +7,16 @@
 [![Tests](https://github.com/nbinding/calshare/actions/workflows/ci.yml/badge.svg)](https://github.com/nbinding/calshare/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/nbinding/calshare/actions/workflows/codeql.yml/badge.svg)](https://github.com/nbinding/calshare/actions/workflows/codeql.yml)
 
+## Design
+
+Opening the app goes straight to the calendar, with no landing page. Tap the days you're free; tap a day again to cycle morning, afternoon and evening; hold a day (or right-click it, or use **Times and maybes**) to open its sheet for more than one time, *maybe*, or removing it. Your name, the plan's title, one person or a group, and the passphrase are asked only when you press **Send to someone**.
+
+- **The overlap is the signature.** Your days are hatched one way, the other person's the other way, and days you share are solid. Maybes add a dotted outline and a "?". Every state is a shape, never only a colour, in light and dark.
+- **Type:** Bricolage Grotesque for dates and headlines, Inter for everything else, both served with the app (see `src/fonts/FONTS.md`).
+- **Sharing in two steps:** send the link, then send the words that open it. Editing the message and the raw link sit behind "Edit the message" and "Show the link".
+- **Settled plans** become a date poster.
+- A sticky bar at the bottom of each calendar screen always shows the count and the one next action.
+
 ## How it works
 
 | Step | Who | What happens |
@@ -35,7 +45,7 @@ If nothing lines up, either side can change their days and send the plan back. A
 
 ## Layout
 
-Phones get a single column with a progress bar at the top. In desktop browsers (1000px and wider) the layout follows stead-mobile: a fixed sidebar with the brand, the plan's steps as a numbered list showing where you are, a progress bar and the privacy note, plus a header breadcrumb ("Calshare / Step 2 of 4") and a wider content column.
+Phones get a single column with a progress bar at the top. In desktop browsers (1000px and wider) a fixed sidebar (after stead-mobile) shows the plan's steps, a progress bar and the privacy note, with a header breadcrumb and a wider content column.
 
 ## Display and accessibility
 
