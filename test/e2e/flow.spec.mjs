@@ -104,6 +104,12 @@ test('each day gets its own time, and the guide can be dismissed and reopened', 
   await expect(guide).toContainText('M morning');
   await expect(page.locator('.day-times-empty')).toBeVisible();
 
+  // Tapping the same day cycles all day → morning → afternoon → evening → cleared.
+  const cell = page.locator(day('2026-11-20'));
+  await cell.click(); await expect(cell).toHaveAttribute('aria-pressed', 'true'); await expect(cell.locator('.tags')).toHaveCount(0);
+  for (const t of ['M', 'A', 'E']) { await cell.click(); await expect(cell.locator('.tags')).toHaveText(t); }
+  await cell.click(); await expect(cell).toHaveAttribute('aria-pressed', 'false');
+
   await page.click(day('2026-11-21'));
   await page.click(day('2026-11-22'));
   const sat = page.getByRole('group', { name: /Time on Saturday/ });

@@ -322,3 +322,7 @@ html[data-font="dyslexic"] .month-head h3 { font-size: min(1.1rem, 5.2vw); }
 .mini-chips span.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 @media (max-width: 380px) { .dt-chips { grid-template-columns: 1fr 1fr; } }
 html[data-spacing="true"] .dt-chips button { letter-spacing: 0 !important; }
+.hint li.wide { grid-template-columns: 1fr; gap: 8px; }
+.hint-pic.cycle { flex-wrap: nowrap; gap: 2px; }
+.hint-pic.cycle .mini-cell { width: min(30px, 8vw); height: min(30px, 8vw); font-size: min(.8125rem, 3.4vw); }
+.hint-pic.cycle .mini-arrow { font-size: .75rem; }

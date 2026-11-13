@@ -50,6 +50,14 @@ export function paint(mask, brush) {
   return tagsOf(next) ? next : (tagsOf(mask) & brush ? 0 : next);
 }
 
+// Tapping a calendar day cycles: not free → any time → morning → afternoon → evening → not free.
+// A day with a combination of times (set with the per-day buttons) is past the end of the cycle, so it clears.
+export const CYCLE = [0, FREE, FREE | MORNING, FREE | AFTERNOON, FREE | EVENING];
+export function cycle(mask) {
+  const i = CYCLE.indexOf(mask);
+  return i < 0 ? 0 : CYCLE[(i + 1) % CYCLE.length];
+}
+
 // Set a free day's time from its own buttons: 0 = any time; a tag toggles, and removing the last tag means any time.
 export function setTime(mask, bit) {
   if (!bit) return FREE;

@@ -15,4 +15,4 @@ export async function expectNoSidewaysScroll(page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
 }
 
-export const day = iso => `[data-day="${iso}"]`;
+export const day = iso => `.cell[data-day="${iso}"]`;

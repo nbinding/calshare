@@ -1,6 +1,6 @@
 import { seal, open, WrongPassphrase, suggestPassphrase } from './share.js';
 import {
-  FREE, TAGS, MAX_MONTHS, paint, setTime, meet, overlap, isFree, tagsOf, tagWords,
+  FREE, TAGS, MAX_MONTHS, cycle, setTime, meet, overlap, isFree, tagsOf, tagWords,
   todayIso, monthOf, addMonths, rangeMonths, rangeDays, daysInMonth, weekdayIndex, parseIso,
   toWire, fromWire, turnAfter, isStale, formatDay, formatMonth, draftMessage, finalSummary, icsFor,
 } from './core.js';
@@ -193,12 +193,10 @@ function markingGuide() {
   return `<aside class="hint" aria-labelledby="hint-h">
     <h3 id="hint-h">How to mark your days</h3>
     <ol>
-      <li><div class="hint-pic">${mini(14)}${arrow}${mini(14, { on: true })}</div>
-        <p><strong>Tap a day</strong> to mark it free. Tap it again to clear it.</p></li>
+      <li class="wide"><div class="hint-pic cycle">${mini(14, { on: true })}${arrow}${mini(14, { on: true, tags: 'M' })}${arrow}${mini(14, { on: true, tags: 'A' })}${arrow}${mini(14, { on: true, tags: 'E' })}${arrow}${mini(14)}</div>
+        <p><strong>Keep tapping a day to change its time:</strong> once for all day, twice for morning, three times for afternoon, four for evening. A fifth tap clears it.</p></li>
       <li><div class="hint-pic">${chips('M')}</div>
-        <p><strong>Set the time for each day</strong> in "Your days" under the calendar. Each day has its own buttons, so Saturday can be morning and Sunday evening.</p></li>
-      <li><div class="hint-pic">${mini(14, { on: true, tags: 'M' })}${mini(15, { on: true, tags: 'E' })}</div>
-        <p><strong>The day shows its letters.</strong> A day can have more than one, like ME.</p></li>
+        <p><strong>Need more than one time on a day?</strong> Use "Your days" under the calendar: each day has its own buttons, so it can be morning and evening (ME).</p></li>
     </ol>
     <p class="small hint-key"><strong>M</strong> morning · <strong>A</strong> afternoon · <strong>E</strong> evening · no letter means any time</p>
     <button class="secondary hint-done" data-act="hint-done">Got it</button>
@@ -639,7 +637,7 @@ $app.addEventListener('click', e => {
       const iso = el.dataset.day;
       focusKey = `day-${iso}`;
       if (S.view === 'pick') { const i = p.picks.indexOf(iso); i >= 0 ? p.picks.splice(i, 1) : p.picks.push(iso); }
-      else { const d = myDays(), m = paint(d[iso] || 0, 0); if (m) d[iso] = m; else delete d[iso]; }
+      else { const d = myDays(), m = cycle(d[iso] || 0); if (m) d[iso] = m; else delete d[iso]; }
       set({ error: '' }); break;
     }
     case 'fill': fill(el.dataset.kind); break;

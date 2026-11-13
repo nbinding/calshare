@@ -13,6 +13,14 @@ test('paint toggles days and tags', () => {
   assert.equal(C.paint(C.FREE | C.MORNING, 0), C.FREE);
 });
 
+test('tapping a day cycles through its times', () => {
+  const { FREE: F, MORNING: M, AFTERNOON: A, EVENING: E } = C;
+  const seen = []; let m = 0;
+  for (let i = 0; i < 5; i++) seen.push(m = C.cycle(m));
+  assert.deepEqual(seen, [F, F | M, F | A, F | E, 0]);
+  assert.equal(C.cycle(F | M | E), 0); // a combination clears
+});
+
 test('setTime gives each day its own time', () => {
   const { FREE: F, MORNING: M, EVENING: E } = C;
   assert.equal(C.setTime(F | M, 0), F);           // any time clears tags
