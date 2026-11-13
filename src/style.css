@@ -107,8 +107,6 @@ textarea { resize: vertical; line-height: 1.5; min-height: 120px; }
 .segmented { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
 .segmented button { flex: 1 1 auto; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 5px; background: none; font-size: .875rem; color: var(--muted-ink); white-space: nowrap; }
 .segmented button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.brush { margin-bottom: 16px; }
-.brush .small { margin-bottom: 8px; }
 
 /* Stepper */
 .stepper { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 24px; padding: 0; }
@@ -287,3 +285,44 @@ html[data-motion="true"] *, html[data-motion="true"] *::before, html[data-motion
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 .month-head h3 { font-size: min(1.3rem, 6.4vw); text-align: center; min-width: 0; overflow-wrap: anywhere; }
 html[data-font="dyslexic"] .month-head h3 { font-size: min(1.1rem, 5.2vw); }
+
+/* Marking guide */
+.hint { margin: 0 0 16px; padding: 14px; border: 1px dashed var(--muted-ink); border-radius: 8px; background: var(--field); }
+.hint h3 { font-size: 1rem; font-weight: 600; margin-bottom: 10px; }
+.hint ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.hint li { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; }
+.hint li p { font-size: .875rem; line-height: 1.5; color: var(--ink); }
+.hint li em { font-style: normal; font-weight: 600; }
+.hint-pic { display: flex; align-items: center; gap: 4px; }
+.mini-cell { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: .8125rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.mini-cell.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.mini-cell small { font-size: .55rem; font-weight: 700; letter-spacing: .06em; margin-top: 1px; }
+.mini-arrow { color: var(--muted-ink); font-size: .875rem; }
+.hint-key { margin-top: 12px; }
+.hint-done { min-height: 44px; padding: 8px 16px; margin-top: 10px; font-size: .9375rem; }
+.hint-open { margin: -6px 0 6px; font-size: .875rem; }
+@media (max-width: 380px) { .hint li { grid-template-columns: 1fr; gap: 6px; } }
+
+/* Per-day times */
+.day-times { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.day-times h3 { font-size: 1rem; font-weight: 600; margin-bottom: 10px; }
+.day-times h3 .small { font-weight: 400; }
+.day-times ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.day-times li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
+.dt-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.dt-head small { color: var(--muted-ink); font-size: .8125rem; }
+.dt-remove { margin-left: auto; display: inline-grid; place-items: center; width: 36px; height: 36px; margin-top: -6px; margin-right: -6px; border: 0; border-radius: var(--radius); background: none; color: var(--muted-ink); }
+.dt-remove svg { width: 18px; height: 18px; }
+.dt-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.dt-chips button { min-height: 44px; padding: 6px 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: .8125rem; line-height: 1.2; overflow-wrap: anywhere; }
+.dt-chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.day-times-empty { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mini-chips { display: inline-flex; gap: 3px; }
+.mini-chips span { display: inline-grid; place-items: center; min-width: 22px; height: 26px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font-size: .65rem; font-weight: 600; }
+.mini-chips span.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+@media (max-width: 380px) { .dt-chips { grid-template-columns: 1fr 1fr; } }
+html[data-spacing="true"] .dt-chips button { letter-spacing: 0 !important; }
+.hint li.wide { grid-template-columns: 1fr; gap: 8px; }
+.hint-pic.cycle { flex-wrap: nowrap; gap: 2px; }
+.hint-pic.cycle .mini-cell { width: min(30px, 8vw); height: min(30px, 8vw); font-size: min(.8125rem, 3.4vw); }
+.hint-pic.cycle .mini-arrow { font-size: .75rem; }
