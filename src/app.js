@@ -1,6 +1,6 @@
 import { seal, open, WrongPassphrase, suggestPassphrase } from './share.js';
 import {
-  FREE, TAGS, MAX_MONTHS, paint, meet, overlap, isFree, tagsOf, tagWords,
+  FREE, TAGS, MAX_MONTHS, paint, setTime, meet, overlap, isFree, tagsOf, tagWords,
   todayIso, monthOf, addMonths, rangeMonths, rangeDays, daysInMonth, weekdayIndex, parseIso,
   toWire, fromWire, turnAfter, isStale, formatDay, formatMonth, draftMessage, finalSummary, icsFor,
 } from './core.js';
@@ -44,7 +44,7 @@ const icon = {
 const S = {
   view: 'home',      // home | unlock | compose | respond | pick | confirm | waiting | done
   plan: null, role: null, pass: '', hash: '',
-  brush: 0, monthIdx: 0,
+  monthIdx: 0,
   sent: null,        // { link, text, step } once a link has been made in this view
   error: '', busy: false, notice: '', newer: null, showPass: false,
 };
@@ -189,27 +189,36 @@ const arrow = '<span class="mini-arrow" aria-hidden="true">→</span>';
 
 function markingGuide() {
   if (hintDismissed() && !S.showHint) return `<button class="text-button hint-open" data-act="hint-open">How marking days works</button>`;
+  const chips = on => `<span class="mini-chips" aria-hidden="true">${['Any', 'M', 'A', 'E'].map(c => `<span class="${c === on ? 'on' : ''}">${c}</span>`).join('')}</span>`;
   return `<aside class="hint" aria-labelledby="hint-h">
     <h3 id="hint-h">How to mark your days</h3>
     <ol>
       <li><div class="hint-pic">${mini(14)}${arrow}${mini(14, { on: true })}</div>
-        <p><strong>Tap a day</strong> with <em>Any time</em> selected: you're free all day. Tap it again to clear it.</p></li>
-      <li><div class="hint-pic">${mini(14)}${arrow}${mini(14, { on: true, tags: 'M' })}</div>
-        <p><strong>Choose Morning, Afternoon or Evening</strong>, then tap a day. Its letter appears on the day.</p></li>
-      <li><div class="hint-pic">${mini(14, { on: true, tags: 'M' })}${arrow}${mini(14, { on: true, tags: 'ME' })}</div>
-        <p><strong>Tap the same day with another time</strong> to add it too. Tap with a time it already has to remove that time.</p></li>
+        <p><strong>Tap a day</strong> to mark it free. Tap it again to clear it.</p></li>
+      <li><div class="hint-pic">${chips('M')}</div>
+        <p><strong>Set the time for each day</strong> in "Your days" under the calendar. Each day has its own buttons, so Saturday can be morning and Sunday evening.</p></li>
+      <li><div class="hint-pic">${mini(14, { on: true, tags: 'M' })}${mini(15, { on: true, tags: 'E' })}</div>
+        <p><strong>The day shows its letters.</strong> A day can have more than one, like ME.</p></li>
     </ol>
     <p class="small hint-key"><strong>M</strong> morning · <strong>A</strong> afternoon · <strong>E</strong> evening · no letter means any time</p>
     <button class="secondary hint-done" data-act="hint-done">Got it</button>
   </aside>`;
 }
 
-function brushBar() {
-  const opts = [{ bit: 0, label: 'Any time', letter: '' }, ...TAGS.map(t => ({ ...t, letter: t.label[0] }))];
-  return `${markingGuide()}<div class="brush"><p class="small">Tap days to mark them as</p>
-    <div class="segmented" role="radiogroup" aria-label="Mark days as">${opts.map(o =>
-      `<button role="radio" aria-checked="${S.brush === o.bit}" data-act="brush" data-bit="${o.bit}">${o.label}${o.letter ? `<span class="brush-letter" aria-hidden="true">${o.letter}</span>` : ''}</button>`).join('')}</div>
-  </div>`;
+// Per-day times: one row per marked day, each with its own buttons.
+function dayTimes(mine, theirs = null, theirName = '') {
+  const days = futureDays(mine, todayIso());
+  if (!days.length) return `<p class="small day-times-empty">Days you mark will appear here, so you can set a time for each one.</p>`;
+  const opts = [{ bit: 0, label: 'Any time' }, ...TAGS];
+  return `<div class="day-times"><h3>Your days <span class="small">· set a time for each</span></h3><ul>${days.map(iso => {
+    const m = mine[iso], short = formatDay(iso, { weekday: 'short', day: 'numeric', month: 'short' });
+    const t = theirs && theirs[iso] ? `<small>${h(theirName)}: ${h(tagWords(theirs[iso]))}</small>` : '';
+    return `<li><div class="dt-head"><strong>${h(short)}</strong>${t}<button class="dt-remove" data-act="remove-day" data-day="${iso}" aria-label="Remove ${h(formatDay(iso))}">${icon.close}</button></div>
+      <div class="dt-chips" role="group" aria-label="Time on ${h(formatDay(iso))}">${opts.map(o => {
+        const on = o.bit ? !!(m & o.bit) : !tagsOf(m);
+        return `<button data-act="time" data-day="${iso}" data-bit="${o.bit}" data-focus="time-${iso}-${o.bit}" aria-pressed="${on}">${o.label}</button>`;
+      }).join('')}</div></li>`;
+  }).join('')}</ul></div>`;
 }
 
 function quickActions() {
@@ -329,10 +338,11 @@ function viewCompose() {
     </section>
     <section class="card">
       <h2>Your free days <span class="count">${plural(n, 'day')}</span></h2>
-      ${brushBar()}
+      ${markingGuide()}
       ${calendar({ mine, theirs })}
       ${quickActions()}
       ${legend(!!p.b, nameOf(p, 'b', 'They'))}
+      ${dayTimes(mine, p.b?.days, nameOf(p, 'b', 'They'))}
     </section>
     <section class="card">
       <h2>Lock it with a passphrase</h2>
@@ -358,10 +368,11 @@ function viewRespond() {
     <section class="card"><label class="field"><span>Your name</span><input data-input="b-name" value="${h(p.b.name)}" maxlength="40" autocomplete="given-name" placeholder="e.g. Alex"></label></section>
     <section class="card">
       <h2>Your free days <span class="count">${both ? `${plural(both, 'match')}` : 'No matches yet'}</span></h2>
-      ${brushBar()}
+      ${markingGuide()}
       ${calendar({ mine: p.b.days, theirs: p.a.days })}
       ${quickActions()}
       ${legend(true, A)}
+      ${dayTimes(p.b.days, p.a.days, A)}
     </section>
     ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
     <button class="primary wide" data-act="send" ${S.busy ? 'disabled' : ''}>${icon.share}${S.busy ? 'Locking…' : `Send my days to ${h(A)}`}</button>
@@ -483,7 +494,7 @@ function startNew() {
   const start = monthOf(todayIso());
   const plan = { id: randomId(), step: 1, created: 0, title: '', start, count: 2, a: { name: '', days: {} }, picks: [] };
   history.replaceState(null, '', baseUrl());
-  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, brush: 0, monthIdx: 0, choices: [] });
+  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, monthIdx: 0, choices: [] });
   scrollTo(0, 0);
 }
 
@@ -506,7 +517,7 @@ function enterPlan(plan, role, pass, hash) {
   const focusDays = view === 'pick' ? Object.keys(overlap(plan.a.days, plan.b.days)) : Object.keys(plan.a.days);
   const first = focusDays.filter(d => d >= today).sort()[0] || today;
   const monthIdx = Math.max(0, months.indexOf(monthOf(first)));
-  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, brush: 0, monthIdx, choices: work.picks.length === 1 ? [...work.picks] : [], notice: '' });
+  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, monthIdx, choices: work.picks.length === 1 ? [...work.picks] : [], notice: '' });
   scrollTo(0, 0);
 }
 
@@ -599,7 +610,7 @@ function fill(kind) {
     if (iso < today) continue;
     const wd = weekdayIndex(iso);
     if (kind === 'clear') delete days[iso];
-    else if ((kind === 'weekends') === (wd >= 5)) days[iso] = (days[iso] && S.brush ? days[iso] : FREE) | S.brush;
+    else if ((kind === 'weekends') === (wd >= 5)) days[iso] = days[iso] || FREE;
   }
   render();
 }
@@ -618,7 +629,8 @@ $app.addEventListener('click', e => {
     case 'pref': { const k = el.dataset.key, v = el.dataset.value; prefs = { ...prefs, [k]: k === 'size' ? Number(v) : v }; applyPrefs(); render(); break; }
     case 'reset-display': prefs = { ...defaultPrefs }; applyPrefs(); focusKey = 'close-display'; render(); toast('Display settings reset'); break;
     case 'new': startNew(); break;
-    case 'brush': set({ brush: Number(el.dataset.bit) }); break;
+    case 'time': { const d = myDays(), iso = el.dataset.day; d[iso] = setTime(d[iso] || FREE, Number(el.dataset.bit)); focusKey = el.dataset.focus; render(); break; }
+    case 'remove-day': delete myDays()[el.dataset.day]; render(); break;
     case 'hint-done': try { localStorage.setItem(HINT_KEY, 'done'); } catch {} focusKey = null; set({ showHint: false }); document.querySelector('[data-act=hint-open]')?.focus(); break;
     case 'hint-open': set({ showHint: true }); document.querySelector('.hint-done')?.focus(); break;
     case 'count': p.count = Number(el.dataset.c); trimToRange(); set({ monthIdx: Math.min(S.monthIdx, p.count - 1) }); break;
@@ -627,7 +639,7 @@ $app.addEventListener('click', e => {
       const iso = el.dataset.day;
       focusKey = `day-${iso}`;
       if (S.view === 'pick') { const i = p.picks.indexOf(iso); i >= 0 ? p.picks.splice(i, 1) : p.picks.push(iso); }
-      else { const d = myDays(), m = paint(d[iso] || 0, S.brush); if (m) d[iso] = m; else delete d[iso]; }
+      else { const d = myDays(), m = paint(d[iso] || 0, 0); if (m) d[iso] = m; else delete d[iso]; }
       set({ error: '' }); break;
     }
     case 'fill': fill(el.dataset.kind); break;

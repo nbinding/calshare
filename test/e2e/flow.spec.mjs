@@ -13,10 +13,10 @@ test('owner and guest agree on two days', async ({ browser }, info) => {
   await owner.getByRole('button', { name: 'Start a plan' }).click();
   await owner.fill('[data-input=a-name]', 'Sam');
   await owner.fill('[data-input=title]', 'Dinner');
-  for (const d of ['2026-11-20', '2026-11-21', '2026-11-28']) await owner.click(day(d));
-  await owner.click('[data-act=brush][data-bit="8"]');
-  await owner.click(day('2026-11-25'));
-  await expect(owner.locator(day('2026-11-25'))).toHaveAttribute('aria-pressed', 'true');
+  for (const d of ['2026-11-20', '2026-11-21', '2026-11-25', '2026-11-28']) await owner.click(day(d));
+  await owner.click('[data-act=time][data-day="2026-11-25"][data-bit="8"]');
+  await expect(owner.locator(day('2026-11-25') + ' .tags')).toHaveText('E');
+  await expect(owner.locator(day('2026-11-21') + ' .tags')).toHaveCount(0);
   const pass = await owner.inputValue('[data-input=pass]');
   expect(pass.split('-')).toHaveLength(3);
   await owner.click('[data-act=send]');
@@ -95,24 +95,30 @@ test('no shared days lets the owner add more', async ({ browser }, info) => {
   await expect(owner.locator(day('2026-11-27'))).toHaveClass(/theirs/);
 });
 
-test('the marking guide explains tags and can be dismissed and reopened', async ({ page }) => {
+test('each day gets its own time, and the guide can be dismissed and reopened', async ({ page }) => {
   await freshPage(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Start a plan' }).click();
   const guide = page.getByRole('complementary', { name: 'How to mark your days' });
   await expect(guide).toBeVisible();
   await expect(guide).toContainText('M morning');
-  await expect(page.locator('[data-act=brush][data-bit="8"] .brush-letter')).toHaveText('E');
+  await expect(page.locator('.day-times-empty')).toBeVisible();
 
-  // Behaviour the guide describes: tags add and remove on the same day.
-  await page.click('[data-act=brush][data-bit="2"]');
-  await page.click(day('2026-11-20'));
-  await expect(page.locator(day('2026-11-20') + ' .tags')).toHaveText('M');
-  await page.click('[data-act=brush][data-bit="8"]');
-  await page.click(day('2026-11-20'));
-  await expect(page.locator(day('2026-11-20') + ' .tags')).toHaveText('ME');
-  await page.click(day('2026-11-20'));
-  await expect(page.locator(day('2026-11-20') + ' .tags')).toHaveText('M');
+  await page.click(day('2026-11-21'));
+  await page.click(day('2026-11-22'));
+  const sat = page.getByRole('group', { name: /Time on Saturday/ });
+  const sun = page.getByRole('group', { name: /Time on Sunday/ });
+  await sat.getByRole('button', { name: 'Morning' }).click();
+  await sun.getByRole('button', { name: 'Evening' }).click();
+  await expect(page.locator(day('2026-11-21') + ' .tags')).toHaveText('M');
+  await expect(page.locator(day('2026-11-22') + ' .tags')).toHaveText('E');
+  await sat.getByRole('button', { name: 'Evening' }).click();
+  await expect(page.locator(day('2026-11-21') + ' .tags')).toHaveText('ME');
+  await sat.getByRole('button', { name: 'Any time' }).click();
+  await expect(page.locator(day('2026-11-21') + ' .tags')).toHaveCount(0);
+  await expect(page.locator(day('2026-11-22') + ' .tags')).toHaveText('E');
+  await page.getByRole('button', { name: /Remove Sunday/ }).click();
+  await expect(page.locator(day('2026-11-22'))).toHaveAttribute('aria-pressed', 'false');
 
   await guide.getByRole('button', { name: 'Got it' }).click();
   await expect(guide).toBeHidden();

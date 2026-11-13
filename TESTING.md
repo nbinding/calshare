@@ -8,7 +8,7 @@ These use Node's built-in test runner, need no install, and run in about a secon
 
 | File | Covers |
 |---|---|
-| `test/core.test.mjs` | Painting days and time tags, overlap rules (for example morning vs evening never match), dates across year boundaries, compact day encoding, round trips of plans to and from the wire format (including links from the first release that held a single final day), draft messages, multi-day summaries and `.ics` output, and encryption with right and wrong passphrases. |
+| `test/core.test.mjs` | Marking days and setting each day's own time, overlap rules (for example morning vs evening never match), dates across year boundaries, compact day encoding, round trips of plans to and from the wire format (including links from the first release that held a single final day), draft messages, multi-day summaries and `.ics` output, and encryption with right and wrong passphrases. |
 | `test/security.test.mjs` | The strict Content-Security-Policy is still in `index.html` (no `unsafe-inline` or `unsafe-eval`, `connect-src 'none'`). No inline scripts or event handlers. No `eval`, `new Function`, `fetch` or other network APIs in the app code. Key derivation stays at 600,000 PBKDF2 iterations with AES-256-GCM and a fresh salt and IV for each link. |
 
 ## 2. Browser tests (`npm run test:e2e`)

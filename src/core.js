@@ -50,6 +50,13 @@ export function paint(mask, brush) {
   return tagsOf(next) ? next : (tagsOf(mask) & brush ? 0 : next);
 }
 
+// Set a free day's time from its own buttons: 0 = any time; a tag toggles, and removing the last tag means any time.
+export function setTime(mask, bit) {
+  if (!bit) return FREE;
+  const next = (mask | FREE) ^ bit;
+  return tagsOf(next) ? next : FREE;
+}
+
 // Two masks meet when both are free and their times are compatible.
 export function meet(a, b) {
   if (!isFree(a) || !isFree(b)) return 0;
