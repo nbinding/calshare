@@ -23,7 +23,11 @@ Guidance for AI coding agents (Claude Code, Codex and others) working in this re
 | `src/app.js` | A single state object `S`, `render()` rebuilds `#app` from template strings, and events are delegated through `data-act` attributes. Display preferences go in `sessionStorage`, plans in `localStorage`. |
 | `src/style.css` | Design tokens on `:root` (light) with dark overrides through `prefers-color-scheme` and `data-theme`. Accessibility settings are applied with `html[data-*]` attributes. |
 
-How a plan moves between the two people: `step` is the step that *produced* the link (1 organiser shared, 2 guest replied, 3 organiser picked, 4 guest confirmed). `turnAfter(step)` says whose turn it is next. Roles are `a` (organiser) and `b` (guest), remembered for each plan id on the device.
+How a plan moves between people: `step` is the step that *produced* the link (1 organiser shared, 2 guest replied, 3 organiser picked, 4 settled). `turnAfter(step)` says whose turn it is next. Roles are `a` (organiser) and `b` (guest), remembered for each plan id on the device.
+
+- **Groups** (`group: true`, wire `g`): one step-1 invite goes to many guests. Each reply (step 2) carries the guest's hidden id (`b.id`, wire `b.u`). The organiser's device files replies under that id in `localStorage` (`replies`), and the organiser locks in the final days straight from the collect view (step 4, with `people` in the link).
+- **Versions** (`a.v`, `b.v`): each send of your own days bumps your version. On opening a link, a newer local copy of *your own* days wins (`enterPlan`), so replies to old links never undo edits.
+- **Edit**: `edit()` reopens the step that made the current link, with `S.editing` set so the message says to use the new link.
 
 ## Before you push
 

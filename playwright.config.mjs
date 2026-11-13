@@ -10,5 +10,6 @@ export default defineConfig({
   projects: [
     { name: 'iphone', use: { ...devices['iPhone 13'], browserName: 'chromium' } },
     { name: 'small-phone', use: { ...devices['iPhone SE'], browserName: 'chromium' } },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
   ],
 });

@@ -25,7 +25,7 @@ jobs:
       - run: npm test
 
   browser:
-    name: Browser tests (phone sizes)
+    name: Browser tests (phone and desktop sizes)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
