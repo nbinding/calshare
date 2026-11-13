@@ -46,8 +46,8 @@ test('group: replies are kept apart by hidden id and the organiser locks in a da
   expect(names.filter(n => n.startsWith('Sam · '))).toHaveLength(2);
   expect(names).toContain(`Sam · ${r1.code}`);
   expect(names).toContain(`Sam · ${r2.code}`);
-  await expect(org.page.locator(day('2026-11-21') + ' .tags')).toHaveText('4/4');
-  await expect(org.page.locator(day('2026-11-20') + ' .tags')).toHaveText('2/4');
+  await expect(org.page.locator(day('2026-11-21') + ' .nb-cell__tags')).toHaveText('4/4');
+  await expect(org.page.locator(day('2026-11-20') + ' .nb-cell__tags')).toHaveText('2/4');
 
   // Sam #1 changes their reply: it replaces the old one instead of adding a fourth person.
   await sam1.page.goto(invite);
@@ -59,12 +59,12 @@ test('group: replies are kept apart by hidden id and the organiser locks in a da
   await expect(sam1.page.locator('.reply-code strong')).toHaveText(r1.code);
   await org.page.goto(sam1.page.url());
   await expect(org.page.locator('.replies li')).toHaveCount(3);
-  await expect(org.page.locator(day('2026-11-25') + ' .tags')).toHaveText('3/4');
+  await expect(org.page.locator(day('2026-11-25') + ' .nb-cell__tags')).toHaveText('3/4');
 
   // An older reply from the same guest doesn't undo the newer one.
   await org.page.goto(r1.link);
   await expect(org.page.getByText('This is an older reply from Sam')).toBeVisible();
-  await expect(org.page.locator(day('2026-11-25') + ' .tags')).toHaveText('3/4');
+  await expect(org.page.locator(day('2026-11-25') + ' .nb-cell__tags')).toHaveText('3/4');
 
   await org.page.getByRole('button', { name: /Days everyone can do/ }).click();
   await expect(org.page.locator('.day-list input:checked')).toHaveCount(1);

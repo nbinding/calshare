@@ -21,7 +21,8 @@ Guidance for AI coding agents (Claude Code, Codex and others) working in this re
 | `src/core.js` | Pure logic with no DOM: dates (UTC calendar dates), day masks (`FREE` plus `MORNING`, `AFTERNOON`, `EVENING` and `MAYBE` bits, one base-32 digit per day in links), `cycle` (calendar taps), `setTime` (per-day buttons), `meet`/`overlap`, hex day encoding, `toWire`/`fromWire`, messages, `.ics`. Put logic here so it can be unit tested. |
 | `src/share.js` | `seal`/`open` (gzip, PBKDF2, AES-GCM, base64url) and `suggestPassphrase` (3 words). |
 | `src/app.js` | A single state object `S`, `render()` rebuilds `#app` from template strings, and events are delegated through `data-act` attributes. Display preferences go in `sessionStorage`, plans in `localStorage`. |
-| `src/style.css` | Design tokens on `:root` (light) with dark overrides through `prefers-color-scheme` and `data-theme`. Accessibility settings are applied with `html[data-*]` attributes. |
+| `src/ds/` | Pinned copy of the nbinding design system: tokens (`--nb-*`), fonts, `nb-` components and `js/nb.js` (`esc`, `toast`, `copy`, `prefs`, `mark`). **Don't edit it here.** Change the design system repo, then run `node scripts/sync-ds.mjs ../nbinding-design-system`. |
+| `src/style.css` | Calshare-only layout on top of the design system: page spacing, the per-day time rows, the desktop shell. Use `--nb-*` tokens. |
 
 How a plan moves between people: `step` is the step that *produced* the link (1 organiser shared, 2 guest replied, 3 organiser picked, 4 settled). `turnAfter(step)` says whose turn it is next. Roles are `a` (organiser) and `b` (guest), remembered for each plan id on the device.
 
@@ -43,6 +44,7 @@ npm run test:e2e         # for any UI or flow change (Chromium is pre-installed 
 ## Style
 
 - Plain, friendly UK English in the UI ("organiser", sentence case, no jargon).
+- Use design-system components (`nb-` classes) for anything on screen. Add a new component to the design system first, rather than styling it only here.
 - Visual language: dark grey and white only. Bricolage Grotesque (display, dates) and Inter (body), self-hosted in `src/fonts/`. Your days hatch at 45°, theirs at -45°, shared days are solid, maybes add a dotted outline and "?". Show every state by shape, not colour alone. Few boxes: structure with space and type. 60px primary buttons, 44px minimum tap targets.
 - The app opens on the calendar; details are asked at send time. Calendar screens end with the sticky `.dock` (count and one next action). Holding a day, right-clicking it or the **Times and maybes** button opens the bottom sheet.
 - Keep functions small and code compact, following the existing style. Comments explain *why*, not *what*.

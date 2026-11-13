@@ -21,7 +21,7 @@ test('index.html has no inline scripts or event handlers', async () => {
 });
 
 test('app code avoids eval-like APIs and external hosts', async () => {
-  for (const f of ['src/app.js', 'src/core.js', 'src/share.js']) {
+  for (const f of ['src/app.js', 'src/core.js', 'src/share.js', 'src/ds/js/nb.js']) {
     const js = await read(f);
     assert.ok(!/\beval\(|new Function\(|document\.write\(/.test(js), `${f} uses an eval-like API`);
     assert.ok(!/\bfetch\(|XMLHttpRequest|sendBeacon|WebSocket\(/.test(js), `${f} makes network requests`);
@@ -39,4 +39,10 @@ test('passphrase key derivation stays strong', async () => {
   assert.match(js, /name: 'AES-GCM', length: 256/);
   assert.match(js, /getRandomValues\(new Uint8Array\(16\)\)/); // fresh salt per link
   assert.match(js, /getRandomValues\(new Uint8Array\(12\)\)/); // fresh IV per link
+});
+
+test('the design system copy is pinned to a commit', async () => {
+  assert.match(await read('src/ds/VERSION'), /^nbinding\/nbinding-design-system@[0-9a-f]{40}\n$/);
+  const html = await read('index.html');
+  assert.ok(html.indexOf('src/ds/nb.css') < html.indexOf('src/style.css'), 'the design system must load before the app styles');
 });

@@ -12,7 +12,8 @@
 Opening the app goes straight to the calendar, with no landing page. Tap the days you're free; tap a day again to cycle morning, afternoon and evening; hold a day (or right-click it, or use **Times and maybes**) to open its sheet for more than one time, *maybe*, or removing it. Your name, the plan's title, one person or a group, and the passphrase are asked only when you press **Send to someone**.
 
 - **The overlap is the signature.** Your days are hatched one way, the other person's the other way, and days you share are solid. Maybes add a dotted outline and a "?". Every state is a shape, never only a colour, in light and dark.
-- **Type:** Bricolage Grotesque for dates and headlines, Inter for everything else, both served with the app (see `src/fonts/FONTS.md`).
+- **Type:** Bricolage Grotesque for dates and headlines, Inter for everything else, both served with the app.
+- **Built on the [nbinding design system](https://github.com/nbinding/nbinding-design-system).** Tokens, fonts and components come from a pinned copy in `src/ds/` (the commit is in `src/ds/VERSION`). `src/style.css` only arranges them into Calshare's screens. To update: `node scripts/sync-ds.mjs ../nbinding-design-system`.
 - **Sharing in two steps:** send the link, then send the words that open it. Editing the message and the raw link sit behind "Edit the message" and "Show the link".
 - **Settled plans** become a date poster.
 - A sticky bar at the bottom of each calendar screen always shows the count and the one next action.
@@ -58,8 +59,9 @@ index.html              Page shell, CSP and metadata
 src/app.js              UI, routing, local storage, events
 src/core.js             Pure logic: dates, day masks, encoding, overlaps, messages, .ics
 src/share.js            Passphrase encryption (PBKDF2 + AES-GCM) and passphrase words
-src/style.css           Dark grey and white design system
-src/fonts/              OpenDyslexic (SIL OFL)
+src/style.css           Calshare's layout on top of the design system
+src/ds/                 Pinned copy of the nbinding design system (tokens, fonts, components, nb.js)
+scripts/sync-ds.mjs     Refreshes src/ds from a local design-system clone
 test/*.test.mjs         Node unit and static security tests
 test/e2e/*.spec.mjs     Playwright browser tests at phone sizes
 test/serve.mjs          Tiny static server used by the browser tests
