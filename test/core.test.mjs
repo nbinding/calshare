@@ -52,13 +52,18 @@ test('plan wire round trip', () => {
 
 test('messages and ics', () => {
   const plan = { id: 'x', step: 4, created: 1, title: 'Dinner', start: '2026-11', count: 1,
-    a: { name: 'Sam', days: { '2026-11-20': 9 } }, b: { name: 'Alex', days: { '2026-11-20': 1 } }, picks: ['2026-11-20'], final: '2026-11-20' };
+    a: { name: 'Sam', days: { '2026-11-20': 9 } }, b: { name: 'Alex', days: { '2026-11-20': 1 } }, picks: ['2026-11-20'], finals: ['2026-11-20'] };
   const s = C.finalSummary(plan, 'L');
   assert.match(s, /Dinner is on Friday.*2026 \(evening\)/);
   assert.match(s, /Sam & Alex/);
   const ics = C.icsFor(plan);
   assert.match(ics, /DTSTART;VALUE=DATE:20261120/);
   assert.match(ics, /DTEND;VALUE=DATE:20261121/);
+  const multi = { ...plan, b: { name: 'Alex', days: { '2026-11-20': 1, '2026-11-27': 1 } }, a: { name: 'Sam', days: { '2026-11-20': 9, '2026-11-27': 1 } }, finals: ['2026-11-20', '2026-11-27'] };
+  assert.match(C.finalSummary(multi), /meeting on 2 days:\n• Friday.*\(evening\)\n• Friday/);
+  assert.equal(C.icsFor(multi).match(/BEGIN:VEVENT/g).length, 2);
+  const w = C.toWire(multi); assert.deepEqual(w.f, [19, 26]);
+  assert.deepEqual(C.fromWire({ ...w, f: 19 }).finals, ['2026-11-20']); // first-release links
   assert.equal(C.turnAfter(1), 'b'); assert.equal(C.turnAfter(2), 'a'); assert.equal(C.turnAfter(4), null);
 });
 

@@ -171,13 +171,22 @@ textarea { resize: vertical; line-height: 1.5; min-height: 120px; }
 .share > .secondary.wide { margin-top: 12px; }
 
 /* Final card */
-.final-card { display: flex; align-items: center; gap: 18px; padding: 20px; margin: 24px 0 16px; border-radius: 12px; background: var(--accent); color: var(--accent-ink); }
+.final-card { padding: 20px; margin: 24px 0 16px; border-radius: 12px; background: var(--accent); color: var(--accent-ink); }
 .final-card .eyebrow, .final-card .small { color: inherit; opacity: .75; }
-.final-card .eyebrow { margin-bottom: 4px; }
-.final-card h2 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 1.45rem; line-height: 1.25; letter-spacing: -.4px; margin-bottom: 4px; }
-.tear { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; width: 72px; height: 76px; border-radius: 10px; background: var(--accent-ink); color: var(--accent); }
-.tear span { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; }
-.tear strong { font-family: Georgia, serif; font-size: 2.1rem; font-weight: 400; line-height: 1; }
+.final-card ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 14px; }
+.final-card li { display: flex; align-items: center; gap: 16px; }
+.final-card li + li { padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--accent-ink) 22%, transparent); }
+.final-card h2 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 1.3rem; line-height: 1.25; letter-spacing: -.3px; margin-bottom: 2px; }
+.tear { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; width: 62px; height: 66px; border-radius: 10px; background: var(--accent-ink); color: var(--accent); }
+.tear span { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; }
+.tear strong { font-family: Georgia, serif; font-size: 1.8rem; font-weight: 400; line-height: 1; }
+
+/* Link on its own: selectable by hand when clipboard access is blocked */
+.linkbox { margin-top: 18px; }
+.linkbox .eyebrow { display: block; margin-bottom: 6px; }
+.link-only { min-height: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8125rem; line-height: 1.45; word-break: break-all; resize: none; background: var(--field); -webkit-user-select: text; user-select: text; }
+.linkbox .small { margin-top: 6px; }
+.passbox code { -webkit-user-select: all; user-select: all; }
 
 /* Notes */
 .note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 12px 14px; margin: 0 0 20px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); background: var(--panel); }

@@ -160,14 +160,20 @@ function legend(withTheirs, theirName) {
   </ul>`;
 }
 
-function dayList(days, { picked = null, radio = false, name = 'day' } = {}) {
+function dayList(days, { picked = null, radio = false, name = 'day', act = null } = {}) {
   const list = Object.keys(days).sort();
   if (!list.length) return '';
   return `<ul class="day-list">${list.map(iso => {
     const on = picked?.includes(iso);
-    const control = picked ? `<input type="${radio ? 'radio' : 'checkbox'}" name="${name}" data-act="${radio ? 'choose' : 'toggle-pick'}" data-day="${iso}" ${on ? 'checked' : ''}>` : '';
+    const control = picked ? `<input type="${radio ? 'radio' : 'checkbox'}" name="${name}" data-act="${act || (radio ? 'choose' : 'toggle-pick')}" data-day="${iso}" ${on ? 'checked' : ''}>` : '';
     return `<li><label class="${picked ? 'choice' : ''} ${on ? 'selected' : ''}">${control}<span><strong>${h(formatDay(iso))}</strong><small>${h(tagWords(days[iso]))}</small></span></label></li>`;
   }).join('')}</ul>`;
+}
+
+function linkField(link) {
+  return `<div class="linkbox"><label class="eyebrow" for="link-only">Link on its own</label>
+    <textarea id="link-only" class="link-only" readonly rows="3" data-select spellcheck="false">${h(link)}</textarea>
+    <p class="small">If the copy buttons don't work in your browser, tap the link above, then select all and copy it.</p></div>`;
 }
 
 function sharePanel() {
@@ -186,6 +192,7 @@ function sharePanel() {
       <button class="${canShare ? 'secondary' : 'primary'}" data-act="copy-message">${icon.copy}Copy message</button>
       <button class="secondary" data-act="copy-link">${icon.copy}Copy link only</button>
     </div>
+    ${linkField(link)}
     ${long}
     ${step === 1 && S.role === 'a' ? `<div class="passbox"><span class="eyebrow">Passphrase</span><code>${h(S.pass)}</code><button class="text-button" data-act="copy-pass">${icon.copy}Copy</button>
       <p class="small">Send this separately, for example in a different app or out loud. Anyone with both the link and the passphrase can open the plan.</p></div>` : ''}
@@ -200,7 +207,7 @@ function viewHome() {
     let p; try { p = fromWire(r.wire); } catch { return ''; }
     const A = nameOf(p, 'a', 'Organiser'), B = nameOf(p, 'b', 'your guest');
     const me = r.role, turn = turnAfter(p.step);
-    const status = p.step === 4 ? `Settled: ${formatDay(p.final, { weekday: 'short', day: 'numeric', month: 'short' })}`
+    const status = p.step === 4 ? `Settled: ${p.finals.map(d => formatDay(d, { weekday: 'short', day: 'numeric', month: 'short' })).join(', ')}`
       : turn === me ? 'Your turn' : `Waiting for ${me === 'a' ? B : A}`;
     return `<li class="plan-row"><a href="#${h(r.hash)}"><strong>${h(p.title || `${A}${p.b ? ' & ' + nameOf(p, 'b', '') : ''}`)}</strong><small>${h(status)}</small></a>
       <button class="text-button" data-act="forget" data-id="${h(id)}" aria-label="Forget this plan">Forget</button></li>`;
@@ -216,7 +223,7 @@ function viewHome() {
       <li><span class="num">1</span><div><h2>You share</h2><p>Pick the days you're free, lock them with a passphrase and send the link.</p></div></li>
       <li><span class="num">2</span><div><h2>They add theirs</h2><p>They see your days, mark their own and send the link back.</p></div></li>
       <li><span class="num">3</span><div><h2>You pick</h2><p>Only the days you're both free are shown. Choose one or a few.</p></div></li>
-      <li><span class="num">4</span><div><h2>They confirm</h2><p>They choose the final day and get a ready-made message to send.</p></div></li>
+      <li><span class="num">4</span><div><h2>They confirm</h2><p>They lock in the final day, or several, and get a ready-made message to send.</p></div></li>
     </ol>
     <p class="privacy">${icon.lock}<span>Your days are encrypted in your browser and travel after the <code>#</code> in the link, which is never sent to any server. Plans you open are kept on this device only, until you forget them.</span></p>
   </main>`;
@@ -334,22 +341,24 @@ function viewConfirm() {
     ${stepper(p, 4)}${banners()}
     <p class="eyebrow">Step 4 of 4 · Your turn</p>
     <h1>${n === 1 ? `${h(A)} suggests <em>one day.</em>` : `Choose from <em>${plural(n, 'day')}.</em>`}</h1>
-    <p class="lead">${n ? 'Confirm the day and you will get a summary to send back.' : 'These days have passed. Change your days and send them back.'}</p>
-    ${n ? `<section class="card">${dayList(opts, { picked: S.choice ? [S.choice] : [], radio: true, name: 'final' })}</section>` : ''}
+    <p class="lead">${n ? `Lock in one day, or several if you're planning a few at once. You'll get a summary to send back.` : 'These days have passed. Change your days and send them back.'}</p>
+    ${n ? `<section class="card"><h2>Days to lock in <span class="count">${S.choices.length} chosen</span></h2>${dayList(opts, { picked: S.choices, name: 'final', act: 'toggle-final' })}
+      ${n > 1 ? `<div class="quick"><button class="text-button" data-act="final-all">Select all</button><button class="text-button" data-act="final-none">Clear</button></div>` : ''}</section>` : ''}
     ${S.error ? `<p class="error" role="alert">${h(S.error)}</p>` : ''}
-    ${n ? `<button class="primary wide" data-act="send" ${S.busy || !S.choice ? 'disabled' : ''}>${icon.cal}${S.busy ? 'Locking…' : 'Confirm this day'}</button>` : ''}
+    ${n ? `<button class="primary wide" data-act="send" ${S.busy || !S.choices.length ? 'disabled' : ''}>${icon.cal}${S.busy ? 'Locking…' : S.choices.length > 1 ? `Lock in ${S.choices.length} days` : 'Lock in this day'}</button>` : ''}
     <button class="text-button" data-act="revise">None of these work: change my days</button>
   </main>`;
 }
 
 function finalCard() {
-  const p = S.plan, mask = meet(p.a.days[p.final] || 0, p.b?.days[p.final] || 0);
-  const dt = parseIso(p.final);
-  return `<div class="final-card">
-    <div class="tear"><span>${h(dt.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }))}</span><strong>${dt.getUTCDate()}</strong></div>
-    <div><p class="eyebrow">${h(p.title || 'Meeting')}</p><h2>${h(formatDay(p.final, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
-    <p class="small">${h(tagsOf(mask) ? tagWords(mask)[0].toUpperCase() + tagWords(mask).slice(1) : 'Any time')} · ${h([p.a.name, p.b?.name].filter(Boolean).join(' & '))}</p></div>
-  </div>`;
+  const p = S.plan, finals = p.finals || [];
+  const who = [p.a.name, p.b?.name].filter(Boolean).join(' & ');
+  const rows = finals.map(iso => {
+    const mask = meet(p.a.days[iso] || 0, p.b?.days[iso] || 0), dt = parseIso(iso), tw = tagWords(mask);
+    return `<li><div class="tear"><span>${h(dt.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }))}</span><strong>${dt.getUTCDate()}</strong></div>
+      <div><h2>${h(formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2><p class="small">${h(tw[0].toUpperCase() + tw.slice(1))}</p></div></li>`;
+  }).join('');
+  return `<div class="final-card"><p class="eyebrow">${h(p.title || 'Meeting')}${finals.length > 1 ? ` · ${finals.length} days` : ''}${who ? ` · ${h(who)}` : ''}</p><ul>${rows}</ul></div>`;
 }
 
 function viewDone() {
@@ -360,6 +369,7 @@ function viewDone() {
     <section class="card">
       <textarea rows="4" aria-label="Summary" data-input="message">${h(S.sent?.text || finalSummary(p))}</textarea>
       <div class="actions"><button class="primary" data-act="copy-message">${icon.copy}Copy summary</button><button class="secondary" data-act="ics">${icon.cal}Add to calendar</button></div>
+      ${S.sent?.link ? linkField(S.sent.link) : ''}
     </section>
     <button class="text-button" data-act="forget-current">Forget this plan on this device</button>
   </main>`;
@@ -407,7 +417,7 @@ function startNew() {
   const start = monthOf(todayIso());
   const plan = { id: randomId(), step: 1, created: 0, title: '', start, count: 2, a: { name: '', days: {} }, picks: [] };
   history.replaceState(null, '', baseUrl());
-  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, brush: 0, monthIdx: 0, choice: null });
+  set({ view: 'compose', plan, role: 'a', pass: suggestPassphrase(), hash: '', sent: null, error: '', notice: '', newer: null, brush: 0, monthIdx: 0, choices: [] });
   scrollTo(0, 0);
 }
 
@@ -423,14 +433,14 @@ function enterPlan(plan, role, pass, hash) {
   if (view === 'respond' && !work.b) work.b = { name: '', days: {} };
   if (view === 'pick') work.picks = work.picks.filter(d => meet(work.a.days[d] || 0, work.b.days[d] || 0));
   const link = `${baseUrl()}#${hash}`;
-  const sent = view === 'waiting' ? { link, text: draftMessage(plan, link), step: plan.step } : view === 'done' ? { link, text: finalSummary(plan), step: 4 } : null;
+  const sent = view === 'waiting' ? { link, text: draftMessage(plan, link), step: plan.step } : view === 'done' ? { link, text: finalSummary(plan, link), step: 4 } : null;
   if (!newer) remember(plan, role, pass, hash);
   // Show the first month that has something to act on
   const months = rangeMonths(plan.start, plan.count), today = todayIso();
   const focusDays = view === 'pick' ? Object.keys(overlap(plan.a.days, plan.b.days)) : Object.keys(plan.a.days);
   const first = focusDays.filter(d => d >= today).sort()[0] || today;
   const monthIdx = Math.max(0, months.indexOf(monthOf(first)));
-  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, brush: 0, monthIdx, choice: work.picks.length === 1 ? work.picks[0] : null, notice: '' });
+  set({ view, plan: work, role, pass, hash, sent, newer, error: '', busy: false, brush: 0, monthIdx, choices: work.picks.length === 1 ? [...work.picks] : [], notice: '' });
   scrollTo(0, 0);
 }
 
@@ -478,17 +488,17 @@ async function send() {
     if (!p.a.name.trim()) return set({ error: 'Add your name so they know who it is from.' });
     if (!futureDays(p.a.days, today).length) return set({ error: 'Mark at least one day you are free.' });
     if (S.pass.trim().length < 6) return set({ error: 'Use a passphrase of at least 6 characters.' });
-    next.step = 1; next.picks = []; delete next.final;
+    next.step = 1; next.picks = []; delete next.finals;
   } else if (S.view === 'respond') {
     if (!p.b.name.trim()) return set({ error: 'Add your name so they know who replied.' });
     if (!futureDays(p.b.days, today).length) return set({ error: 'Mark at least one day you are free.' });
-    next.step = 2; next.picks = []; delete next.final;
+    next.step = 2; next.picks = []; delete next.finals;
   } else if (S.view === 'pick') {
     if (!p.picks.length) return set({ error: 'Pick at least one day.' });
-    next.step = 3; next.picks = [...p.picks].sort(); delete next.final;
+    next.step = 3; next.picks = [...p.picks].sort(); delete next.finals;
   } else if (S.view === 'confirm') {
-    if (!S.choice) return set({ error: 'Choose a day.' });
-    next.step = 4; next.final = S.choice;
+    if (!S.choices.length) return set({ error: 'Choose at least one day.' });
+    next.step = 4; next.finals = [...S.choices].sort();
   }
   next.a.name = next.a.name.trim(); if (next.b) next.b.name = next.b.name.trim(); next.title = next.title.trim();
   next.created = Date.now();
@@ -509,7 +519,7 @@ async function send() {
 // Go back to editing my own days and resend (owner → step 1 again, guest → step 2 again).
 function revise() {
   const p = clone(S.plan);
-  p.picks = []; delete p.final;
+  p.picks = []; delete p.finals;
   if (S.role === 'a') set({ view: 'compose', plan: p, sent: null, error: '', notice: 'Add more days, then send the new link. Their days stay marked with a dashed outline.' });
   else set({ view: 'respond', plan: p, sent: null, error: '', notice: 'Change your days, then send the new link back.' });
   scrollTo(0, 0);
@@ -555,6 +565,8 @@ $app.addEventListener('click', e => {
     case 'fill': fill(el.dataset.kind); break;
     case 'pick-all': p.picks = Object.keys(overlap(p.a.days, p.b.days)).filter(d => d >= todayIso()); render(); break;
     case 'pick-none': p.picks = []; render(); break;
+    case 'final-all': set({ choices: p.picks.filter(d => d >= todayIso()), error: '' }); break;
+    case 'final-none': set({ choices: [] }); break;
     case 'reroll': set({ pass: suggestPassphrase() }); break;
     case 'send': send(); break;
     case 'unsend': set({ sent: null }); break;
@@ -565,7 +577,7 @@ $app.addEventListener('click', e => {
     case 'native-share': navigator.share({ text: document.querySelector('[data-input=message]')?.value || S.sent.text }).catch(() => {}); break;
     case 'ics': {
       const url = URL.createObjectURL(new Blob([icsFor(p)], { type: 'text/calendar' }));
-      Object.assign(document.createElement('a'), { href: url, download: `${(p.title || 'meet-up').replace(/[^\w-]+/g, '-').toLowerCase()}-${p.final}.ics` }).click();
+      Object.assign(document.createElement('a'), { href: url, download: `${(p.title || 'meet-up').replace(/[^\w-]+/g, '-').toLowerCase()}-${p.finals[0]}.ics` }).click();
       setTimeout(() => URL.revokeObjectURL(url), 1000); break;
     }
     case 'forget': forget(el.dataset.id); render(); toast('Forgotten on this device'); break;
@@ -581,7 +593,11 @@ $app.addEventListener('change', e => {
     const p = S.plan, iso = el.dataset.day, i = p.picks.indexOf(iso);
     if (el.checked && i < 0) p.picks.push(iso); if (!el.checked && i >= 0) p.picks.splice(i, 1);
     render();
-  } else if (el.dataset.act === 'choose') { set({ choice: el.dataset.day, error: '' }); }
+  } else if (el.dataset.act === 'toggle-final') {
+    const iso = el.dataset.day, c = S.choices.filter(d => d !== iso);
+    if (el.checked) c.push(iso);
+    set({ choices: c, error: '' });
+  }
   else if (el.dataset.input === 'start') { S.plan.start = el.value; trimToRange(); set({ monthIdx: 0 }); }
 });
 
@@ -592,6 +608,10 @@ $app.addEventListener('input', e => {
   else if (k === 'title') p.title = el.value;
   else if (k === 'pass') S.pass = el.value;
   else if (k === 'message' && S.sent) S.sent.text = el.value;
+});
+
+$app.addEventListener('focusin', e => {
+  if (e.target.matches('[data-select]')) setTimeout(() => { try { e.target.setSelectionRange(0, e.target.value.length); } catch {} }, 0);
 });
 
 $app.addEventListener('submit', e => { e.preventDefault(); if (e.target.dataset.form === 'unlock') unlock(); });

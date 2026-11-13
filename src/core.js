@@ -87,7 +87,7 @@ export function decodeDays(str, start, count) {
 }
 
 // ---- Plan <-> wire payload ----
-// Plan: { id, step, created, title, start, count, a:{name,days}, b:{name,days}, picks:[iso], final:iso }
+// Plan: { id, step, created, title, start, count, a:{name,days}, b:{name,days}, picks:[iso], finals:[iso] }
 // step = the step that produced this link: 1 owner shared, 2 recipient replied, 3 owner picked, 4 recipient confirmed.
 export function toWire(plan) {
   const w = { v: 1, i: plan.id, s: plan.step, t: plan.created, m: plan.start, c: plan.count };
@@ -95,7 +95,7 @@ export function toWire(plan) {
   w.a = { n: plan.a.name, d: encodeDays(plan.a.days, plan.start, plan.count) };
   if (plan.b) w.b = { n: plan.b.name, d: encodeDays(plan.b.days, plan.start, plan.count) };
   if (plan.picks?.length) w.p = plan.picks.map(iso => dayOffset(plan.start, iso));
-  if (plan.final) w.f = dayOffset(plan.start, plan.final);
+  if (plan.finals?.length) w.f = plan.finals.map(iso => dayOffset(plan.start, iso));
   return w;
 }
 
@@ -108,7 +108,8 @@ export function fromWire(w) {
   };
   if (w.b) plan.b = { name: String(w.b.n || '').slice(0, 40), days: decodeDays(w.b.d, w.m, w.c) };
   plan.picks = Array.isArray(w.p) ? w.p.map(o => isoAtOffset(w.m, o | 0)) : [];
-  if (w.f != null) plan.final = isoAtOffset(w.m, w.f | 0);
+  // f was a single offset in the first release; it is now a list.
+  if (w.f != null) plan.finals = (Array.isArray(w.f) ? w.f : [w.f]).map(o => isoAtOffset(w.m, o | 0));
   return plan;
 }
 
@@ -138,31 +139,36 @@ export function draftMessage(plan, link) {
     }
     case 3: {
       const list = plan.picks.map(shortDay).join(', ');
-      return `I've narrowed it down${about(plan)}: ${list}. Choose the one you'd like and it's settled:\n${link}`;
+      return `I've narrowed it down${about(plan)}: ${list}. Choose the one you'd like (or more than one) and it's settled:\n${link}`;
     }
     default: return finalSummary(plan, link);
   }
 }
 
+const timeOn = (plan, iso) => meet(plan.a.days[iso] || 0, plan.b?.days[iso] || 0);
+const longDay = iso => formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
 export function finalSummary(plan, link) {
-  const mask = meet(plan.a.days[plan.final] || 0, plan.b?.days[plan.final] || 0);
-  const when = formatDay(plan.final, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const time = tagsOf(mask) ? ` (${tagWords(mask)})` : '';
+  const finals = plan.finals || [];
   const who = [plan.a.name, plan.b?.name].filter(Boolean).join(' & ');
-  const what = plan.title ? `${plan.title} is on` : `we're meeting on`;
-  return `It's settled: ${what} ${when}${time}.${who ? `\n— ${who}` : ''}${link ? `\n${link}` : ''}`;
+  const line = iso => { const m = timeOn(plan, iso); return `${longDay(iso)}${tagsOf(m) ? ` (${tagWords(m)})` : ''}`; };
+  let body;
+  if (finals.length === 1) body = `It's settled: ${plan.title ? `${plan.title} is on` : `we're meeting on`} ${line(finals[0])}.`;
+  else body = `It's settled${plan.title ? ` for ${plan.title}` : ''}. We're meeting on ${finals.length} days:\n${finals.map(d => `• ${line(d)}`).join('\n')}`;
+  return `${body}${who ? `\n— ${who}` : ''}${link ? `\n${link}` : ''}`;
 }
 
 export function icsFor(plan, now = new Date()) {
-  const d = plan.final.replace(/-/g, '');
-  const next = isoFromDate(new Date(parseIso(plan.final).getTime() + 86400000)).replace(/-/g, '');
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const esc = s => s.replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
   const who = [plan.a.name, plan.b?.name].filter(Boolean).join(' & ');
-  const mask = meet(plan.a.days[plan.final] || 0, plan.b?.days[plan.final] || 0);
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Calshare//EN', 'BEGIN:VEVENT',
-    `UID:${plan.id}-${d}@calshare`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`,
-    `SUMMARY:${esc(plan.title || (who ? `Meet: ${who}` : 'Meet up'))}`,
-    `DESCRIPTION:${esc(`Agreed with Calshare${who ? ' by ' + who : ''}. Time: ${tagWords(mask)}.`)}`,
-    'TRANSP:TRANSPARENT', 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n');
+  const events = (plan.finals || []).flatMap(iso => {
+    const d = iso.replace(/-/g, '');
+    const next = isoFromDate(new Date(parseIso(iso).getTime() + 86400000)).replace(/-/g, '');
+    return ['BEGIN:VEVENT', `UID:${plan.id}-${d}@calshare`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`,
+      `SUMMARY:${esc(plan.title || (who ? `Meet: ${who}` : 'Meet up'))}`,
+      `DESCRIPTION:${esc(`Agreed with Calshare${who ? ' by ' + who : ''}. Time: ${tagWords(timeOn(plan, iso))}.`)}`,
+      'TRANSP:TRANSPARENT', 'END:VEVENT'];
+  });
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Calshare//EN', ...events, 'END:VCALENDAR', ''].join('\r\n');
 }
