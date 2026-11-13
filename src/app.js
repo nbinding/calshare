@@ -34,6 +34,8 @@ const icon = {
   share: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>',
   lock: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
   cal: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
+  close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   theme: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>',
   dice: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>',
 };
@@ -50,20 +52,57 @@ let focusKey = null;
 
 function set(patch) { Object.assign(S, patch); render(); }
 
-// ---------- Theme (per-viewer convenience) ----------
-function applyTheme(t) {
-  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+// ---------- Display and accessibility (adapted from stead-mobile; kept for this tab's session) ----------
+const PREF_KEY = 'calshare-display-v1';
+const defaultPrefs = { size: 100, font: 'default', theme: 'system', dateHelp: false, spacing: false, motion: false };
+function readPrefs() {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(PREF_KEY)) || {};
+    return {
+      size: [100, 115, 130, 150].includes(p.size) ? p.size : 100,
+      font: ['default', 'sans', 'dyslexic'].includes(p.font) ? p.font : 'default',
+      theme: ['system', 'light', 'dark'].includes(p.theme) ? p.theme : 'system',
+      dateHelp: p.dateHelp === true, spacing: p.spacing === true, motion: p.motion === true,
+    };
+  } catch { return { ...defaultPrefs }; }
 }
-function currentTheme() { try { return localStorage.getItem('calshare-theme') || 'device'; } catch { return 'device'; } }
-applyTheme(currentTheme());
+let prefs = readPrefs();
+function applyPrefs() {
+  const root = document.documentElement;
+  root.style.setProperty('--text-scale', prefs.size / 100);
+  if (prefs.theme === 'system') delete root.dataset.theme; else root.dataset.theme = prefs.theme;
+  root.dataset.font = prefs.font;
+  root.dataset.dateHelp = String(prefs.dateHelp);
+  root.dataset.spacing = String(prefs.spacing);
+  root.dataset.motion = String(prefs.motion);
+  try { sessionStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* private mode: still applies for this page */ }
+}
+applyPrefs();
+
+function displayDialog() {
+  const opt = (key, value, label, sub = '') => `<button type="button" data-act="pref" data-key="${key}" data-value="${value}" data-focus="pref-${key}-${value}" aria-pressed="${prefs[key] === value}">${label}${sub ? `<small>${sub}</small>` : ''}</button>`;
+  const toggle = (key, title, desc) => `<label class="setting-toggle"><input type="checkbox" data-act="pref-toggle" data-key="${key}" data-focus="pref-${key}" ${prefs[key] ? 'checked' : ''}><span><strong>${title}</strong><small>${desc}</small></span></label>`;
+  return `<div class="backdrop" data-act="close-display"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="display-h">
+    <div class="dialog-head"><h2 id="display-h">Display and accessibility</h2><button class="icon-button" data-act="close-display" data-focus="close-display" aria-label="Close">${icon.close}</button></div>
+    <p class="small">Make Calshare comfortable for you. These settings stay in this tab for the current browser session, including refreshes. Your plans are saved separately.</p>
+    <fieldset><legend>Text size</legend><div class="setting-options">${[[100, 'Standard'], [115, 'Large'], [130, 'Larger'], [150, 'Largest']].map(([v, l]) => opt('size', v, l, v + '%')).join('')}</div><p class="small">Browser zoom also works.</p></fieldset>
+    <fieldset><legend>Reading font</legend><div class="setting-options">${opt('font', 'default', 'Original')}${opt('font', 'sans', 'Plain sans')}${opt('font', 'dyslexic', 'OpenDyslexic')}</div><p class="small">Choose whichever feels easiest to read. OpenDyslexic is included with the app.</p></fieldset>
+    <fieldset><legend>Appearance</legend><div class="setting-options">${opt('theme', 'system', 'Use device')}${opt('theme', 'light', 'Light')}${opt('theme', 'dark', 'Dark')}</div></fieldset>
+    ${toggle('dateHelp', 'Help with dates', 'Show the weekday inside every day, label today in words and draw outlines more strongly.')}
+    ${toggle('spacing', 'More breathing room', 'Increase line height, letter spacing and spacing between words.')}
+    ${toggle('motion', 'Reduce motion', 'Remove animations and transitions.')}
+    <div class="settings-preview" aria-hidden="true"><span class="eyebrow">Reading preview</span><p><strong>Saturday 21 November</strong></p><p class="small">Both free in the evening</p></div>
+    <div class="dialog-actions"><button class="secondary" data-act="reset-display">Reset display settings</button><button class="primary" data-act="close-display">Done</button></div>
+  </div>`;
+}
 
 // ---------- Rendering pieces ----------
 function header() {
-  const t = currentTheme();
   return `<header class="topbar">
     <a class="brand" href="${h(baseUrl())}" data-act="home"><span class="brand-mark">c</span>calshare<span class="brand-period">.</span></a>
     <div class="top-actions">
-      <button class="chip-button" data-act="theme" aria-label="Appearance: ${t}">${icon.theme}<span>${t === 'device' ? 'Auto' : t === 'dark' ? 'Dark' : 'Light'}</span></button>
+      <button class="chip-button" data-act="open-display" data-focus="open-display" aria-label="Display and accessibility settings" aria-haspopup="dialog">${icon.settings}<span>Display</span></button>
     </div>
   </header>`;
 }
@@ -126,7 +165,7 @@ function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 
     if (past) cls.push('past');
     if (iso === today) cls.push('today');
     const tags = tagsOf(tagMask) ? TAGS.filter(x => tagMask & x.bit).map(x => x.label[0]).join('') : '';
-    cells.push(`<button class="${cls.join(' ')}" data-act="day" data-day="${iso}" data-focus="day-${iso}" ${disabled ? 'disabled' : ''} ${pressed != null ? `aria-pressed="${pressed}"` : ''} aria-label="${h(label)}"><span class="num">${d}</span>${tags ? `<span class="tags">${tags}</span>` : ''}</button>`);
+    cells.push(`<button class="${cls.join(' ')}" data-act="day" data-day="${iso}" data-focus="day-${iso}" ${disabled ? 'disabled' : ''} ${pressed != null ? `aria-pressed="${pressed}"` : ''} aria-label="${h(label)}"><span class="wd" aria-hidden="true">${iso === today ? 'Today' : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekdayIndex(iso)]}</span><span class="num">${d}</span>${tags ? `<span class="tags">${tags}</span>` : ''}</button>`);
   }
   return `<div class="calendar">
     ${tabs}
@@ -388,8 +427,10 @@ const views = { home: viewHome, unlock: viewUnlock, compose: viewCompose, respon
 function render() {
   const active = document.activeElement;
   const keep = focusKey || active?.dataset?.focus || null;
-  $app.innerHTML = header() + views[S.view]() + `<footer>Calshare · free days only, never times or details · <a href="https://github.com/nbinding/calshare">Source</a></footer>`;
+  $app.innerHTML = `<a class="skip-link" href="#main" data-act="skip">Skip to main content</a>` + header() + views[S.view]().replace('<main class=', '<main id="main" tabindex="-1" class=') + (S.display ? displayDialog() : '') + `<footer>Calshare · free days only, never times or details · <a href="https://github.com/nbinding/calshare">Source</a></footer>`;
   if (keep) document.querySelector(`[data-focus="${keep}"]`)?.focus({ preventScroll: true });
+  document.body.classList.toggle('dialog-open', !!S.display);
+  if (S.display && !document.querySelector('.dialog')?.contains(document.activeElement)) document.querySelector('.dialog [data-focus=close-display]')?.focus();
   focusKey = null;
 }
 
@@ -546,11 +587,11 @@ $app.addEventListener('click', e => {
   const p = S.plan;
   switch (act) {
     case 'home': e.preventDefault(); history.pushState(null, '', baseUrl()); set({ view: 'home', plan: null, sent: null, notice: '', newer: null }); break;
-    case 'theme': {
-      const order = ['device', 'light', 'dark'], next = order[(order.indexOf(currentTheme()) + 1) % 3];
-      try { localStorage.setItem('calshare-theme', next); } catch {}
-      applyTheme(next); focusKey = null; render(); document.querySelector('[data-act=theme]')?.focus(); break;
-    }
+    case 'skip': e.preventDefault(); document.getElementById('main')?.focus(); break;
+    case 'open-display': set({ display: true }); break;
+    case 'close-display': focusKey = 'open-display'; set({ display: false }); break;
+    case 'pref': { const k = el.dataset.key, v = el.dataset.value; prefs = { ...prefs, [k]: k === 'size' ? Number(v) : v }; applyPrefs(); render(); break; }
+    case 'reset-display': prefs = { ...defaultPrefs }; applyPrefs(); focusKey = 'close-display'; render(); toast('Display settings reset'); break;
     case 'new': startNew(); break;
     case 'brush': set({ brush: Number(el.dataset.bit) }); break;
     case 'count': p.count = Number(el.dataset.c); trimToRange(); set({ monthIdx: Math.min(S.monthIdx, p.count - 1) }); break;
@@ -589,6 +630,7 @@ $app.addEventListener('click', e => {
 
 $app.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.act === 'pref-toggle') { prefs = { ...prefs, [el.dataset.key]: el.checked }; applyPrefs(); render(); return; }
   if (el.dataset.act === 'toggle-pick') {
     const p = S.plan, iso = el.dataset.day, i = p.picks.indexOf(iso);
     if (el.checked && i < 0) p.picks.push(iso); if (!el.checked && i >= 0) p.picks.splice(i, 1);
@@ -620,6 +662,17 @@ function trimToRange() {
   const p = S.plan, keep = new Set(rangeDays(p.start, p.count));
   for (const who of ['a', 'b']) if (p[who]) for (const d of Object.keys(p[who].days)) if (!keep.has(d)) delete p[who].days[d];
 }
+
+addEventListener('keydown', e => {
+  if (!S.display) return;
+  if (e.key === 'Escape') { focusKey = 'open-display'; set({ display: false }); return; }
+  if (e.key === 'Tab') { // keep focus inside the dialog
+    const f = [...document.querySelectorAll('.dialog button, .dialog input')];
+    if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f.at(-1).focus(); }
+    else if (!e.shiftKey && document.activeElement === f.at(-1)) { e.preventDefault(); f[0].focus(); }
+  }
+});
 
 // hashchange and popstate can both fire for one navigation; route once.
 let routeQueued = false;

@@ -22,9 +22,21 @@ If nothing lines up, either side can change their days and send the plan back. A
 - Links older than 14 days get a warning. Opening an older link when you've already saved a later step shows a "newer version" banner.
 - A strict Content-Security-Policy blocks all network requests from the page.
 
+## Display and accessibility
+
+The **Display** button in the header opens settings adapted from stead-mobile:
+
+- **Text size:** Standard, Large, Larger or Largest (100–150%). Everything scales, and the day squares keep their labels inside at any size.
+- **Reading font:** Original, plain sans-serif, or OpenDyslexic. OpenDyslexic is included with the app in `src/fonts/` under the SIL Open Font License and only downloads when chosen.
+- **Appearance:** device, light or dark.
+- **Help with dates:** shows the weekday inside every day square, labels today in words and draws outlines more strongly. This takes the place of stead's "help with numbers".
+- **More breathing room** and **Reduce motion**.
+
+The settings stay in `sessionStorage` for the current tab, as in stead. The dialog traps focus and closes with Escape. There's also a skip-to-content link.
+
 ## Design
 
-The look is adapted from stead-mobile, in dark grey and white: Georgia display type with a muted italic accent, Arial body, 6px radii, 56px main buttons and 44px tap targets. It follows the device's light or dark mode, or you can set it in the header. Calendar states don't depend on colour: you get a filled fill, a dashed outline and a ring with a dot.
+The look is adapted from stead-mobile, in dark grey and white: Georgia display type with a muted italic accent, Arial body, 6px radii, 56px main buttons and 44px tap targets. It follows the device's light or dark mode, or you can set it under Display. Calendar states don't depend on colour: you get a filled fill, a dashed outline and a ring with a dot.
 
 ## Run, test and host
 
