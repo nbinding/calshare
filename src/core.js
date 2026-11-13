@@ -142,7 +142,7 @@ export function formatMonth(month, locale) {
 }
 const shortDay = iso => formatDay(iso, { weekday: 'short', day: 'numeric', month: 'short' });
 const about = plan => (plan.title ? ` for ${plan.title}` : '');
-const passNote = '(The passphrase is the one we agreed, sent separately.)';
+const passNote = "It's locked with a passphrase, which I'll send you in a separate message.";
 
 export function draftMessage(plan, link) {
   const A = plan.a.name || 'I', B = plan.b?.name || '';
