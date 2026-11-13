@@ -75,7 +75,7 @@ export async function open(code, passphrase, iterations = ITERATIONS) {
 
 const WORDS = ('acorn amber anchor apple arch atlas autumn badge bamboo banner barley basin beacon bench birch biscuit blossom bonnet border bramble breeze brick bridge brook bucket button cabin cable camel candle canvas canyon carpet castle cedar cellar chalk channel cherry chestnut cinder circle clover cobble comet copper coral cotton cradle crater crayon cricket crystal cupboard daisy dawn delta denim dew dolphin dune ember engine fable falcon feather fern fiddle field flint forest fossil fountain fox garden garnet ginger glacier globe granite gravel grove harbour harvest hazel heather hedge heron hill honey horizon island ivory jasmine jetty juniper kettle kite lagoon lantern larch lark lemon lily linen lobster locket lupin maple marble marsh meadow mesa mint mitten moss motor nectar nest nutmeg oak oasis ocean olive orbit orchard otter paddle pebble pepper pigeon pine planet plum pocket pony poppy prairie puffin quarry quill rabbit raven reef ribbon ridge river robin rocket rowan saddle saffron sail salmon sapling satin scarf shell shore silver sketch slate sparrow spruce stable star stone summit swallow teapot thistle thunder timber tulip tunnel valley velvet violet walnut wave willow window winter wren yarrow zephyr').split(' ');
 
-export function suggestPassphrase(count = 4) {
+export function suggestPassphrase(count = 3) {
   const pick = crypto.getRandomValues(new Uint32Array(count));
   return Array.from(pick, n => WORDS[n % WORDS.length]).join('-');
 }
