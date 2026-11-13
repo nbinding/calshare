@@ -179,11 +179,36 @@ function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 
   </div>`;
 }
 
+const HINT_KEY = 'calshare-hint-marking';
+function hintDismissed() { try { return localStorage.getItem(HINT_KEY) === 'done'; } catch { return false; } }
+
+// A small picture of a day square, used in the marking guide.
+const mini = (n, { on = false, tags = '' } = {}) =>
+  `<span class="mini-cell${on ? ' on' : ''}" aria-hidden="true"><span>${n}</span>${tags ? `<small>${tags}</small>` : ''}</span>`;
+const arrow = '<span class="mini-arrow" aria-hidden="true">→</span>';
+
+function markingGuide() {
+  if (hintDismissed() && !S.showHint) return `<button class="text-button hint-open" data-act="hint-open">How marking days works</button>`;
+  return `<aside class="hint" aria-labelledby="hint-h">
+    <h3 id="hint-h">How to mark your days</h3>
+    <ol>
+      <li><div class="hint-pic">${mini(14)}${arrow}${mini(14, { on: true })}</div>
+        <p><strong>Tap a day</strong> with <em>Any time</em> selected: you're free all day. Tap it again to clear it.</p></li>
+      <li><div class="hint-pic">${mini(14)}${arrow}${mini(14, { on: true, tags: 'M' })}</div>
+        <p><strong>Choose Morning, Afternoon or Evening</strong>, then tap a day. Its letter appears on the day.</p></li>
+      <li><div class="hint-pic">${mini(14, { on: true, tags: 'M' })}${arrow}${mini(14, { on: true, tags: 'ME' })}</div>
+        <p><strong>Tap the same day with another time</strong> to add it too. Tap with a time it already has to remove that time.</p></li>
+    </ol>
+    <p class="small hint-key"><strong>M</strong> morning · <strong>A</strong> afternoon · <strong>E</strong> evening · no letter means any time</p>
+    <button class="secondary hint-done" data-act="hint-done">Got it</button>
+  </aside>`;
+}
+
 function brushBar() {
-  const opts = [{ bit: 0, label: 'Any time' }, ...TAGS];
-  return `<div class="brush"><p class="small">Tap days to mark them as</p>
+  const opts = [{ bit: 0, label: 'Any time', letter: '' }, ...TAGS.map(t => ({ ...t, letter: t.label[0] }))];
+  return `${markingGuide()}<div class="brush"><p class="small">Tap days to mark them as</p>
     <div class="segmented" role="radiogroup" aria-label="Mark days as">${opts.map(o =>
-      `<button role="radio" aria-checked="${S.brush === o.bit}" data-act="brush" data-bit="${o.bit}">${o.label}</button>`).join('')}</div>
+      `<button role="radio" aria-checked="${S.brush === o.bit}" data-act="brush" data-bit="${o.bit}">${o.label}${o.letter ? `<span class="brush-letter" aria-hidden="true">${o.letter}</span>` : ''}</button>`).join('')}</div>
   </div>`;
 }
 
@@ -594,6 +619,8 @@ $app.addEventListener('click', e => {
     case 'reset-display': prefs = { ...defaultPrefs }; applyPrefs(); focusKey = 'close-display'; render(); toast('Display settings reset'); break;
     case 'new': startNew(); break;
     case 'brush': set({ brush: Number(el.dataset.bit) }); break;
+    case 'hint-done': try { localStorage.setItem(HINT_KEY, 'done'); } catch {} focusKey = null; set({ showHint: false }); document.querySelector('[data-act=hint-open]')?.focus(); break;
+    case 'hint-open': set({ showHint: true }); document.querySelector('.hint-done')?.focus(); break;
     case 'count': p.count = Number(el.dataset.c); trimToRange(); set({ monthIdx: Math.min(S.monthIdx, p.count - 1) }); break;
     case 'month': { const i = Number(el.dataset.i); if (i >= 0 && i < p.count) set({ monthIdx: i }); break; }
     case 'day': {

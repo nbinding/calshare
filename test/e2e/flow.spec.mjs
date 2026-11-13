@@ -94,3 +94,32 @@ test('no shared days lets the owner add more', async ({ browser }, info) => {
   await owner.getByRole('button', { name: 'Add more days' }).click();
   await expect(owner.locator(day('2026-11-27'))).toHaveClass(/theirs/);
 });
+
+test('the marking guide explains tags and can be dismissed and reopened', async ({ page }) => {
+  await freshPage(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start a plan' }).click();
+  const guide = page.getByRole('complementary', { name: 'How to mark your days' });
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText('M morning');
+  await expect(page.locator('[data-act=brush][data-bit="8"] .brush-letter')).toHaveText('E');
+
+  // Behaviour the guide describes: tags add and remove on the same day.
+  await page.click('[data-act=brush][data-bit="2"]');
+  await page.click(day('2026-11-20'));
+  await expect(page.locator(day('2026-11-20') + ' .tags')).toHaveText('M');
+  await page.click('[data-act=brush][data-bit="8"]');
+  await page.click(day('2026-11-20'));
+  await expect(page.locator(day('2026-11-20') + ' .tags')).toHaveText('ME');
+  await page.click(day('2026-11-20'));
+  await expect(page.locator(day('2026-11-20') + ' .tags')).toHaveText('M');
+
+  await guide.getByRole('button', { name: 'Got it' }).click();
+  await expect(guide).toBeHidden();
+  await page.reload();
+  await page.getByRole('button', { name: 'Start a plan' }).click();
+  await expect(guide).toBeHidden();
+  await page.getByRole('button', { name: 'How marking days works' }).click();
+  await expect(guide).toBeVisible();
+  await expectNoSidewaysScroll(page);
+});
