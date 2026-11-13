@@ -18,7 +18,7 @@ test('organiser edits after sending; a reply to the old link keeps the new days'
   await owner.locator('.plan-row a').click();
   await expect(owner.locator('h1')).toContainText('Over to');
   await owner.getByRole('button', { name: 'Edit my days' }).click();
-  await expect(owner.locator('.context').first()).toContainText('Editing');
+  await expect(owner.locator('.nb-context').first()).toContainText('Editing');
   await owner.click(day('2026-11-27'));
   await owner.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(owner.getByRole('radio', { name: 'A group' })).toHaveCount(0);
@@ -29,7 +29,7 @@ test('organiser edits after sending; a reply to the old link keeps the new days'
   // The guest still uses the old link and replies.
   await guest.goto(oldLink);
   await guest.fill('#pass', pass); await guest.click('button[type=submit]');
-  await expect(guest.locator('.cal-lead')).toContainText('Sam is free on 2 days');
+  await expect(guest.locator('.nb-cal__lead')).toContainText('Sam is free on 2 days');
   await guest.fill('[data-input=b-name]', 'Alex');
   for (const d of ['2026-11-21', '2026-11-27']) await guest.click(day(d));
   await guest.click('[data-act=send]');

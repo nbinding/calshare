@@ -17,7 +17,7 @@ test('names and titles from a link are escaped', async ({ page }) => {
   await page.goto(`/#${hash}`);
   await page.fill('#pass', 'pass-word-here');
   await page.click('button[type=submit]');
-  await expect(page.locator('.context')).toContainText('<img src=x');
+  await expect(page.locator('.nb-context')).toContainText('<img src=x');
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   expect(await page.locator('main img, main script').count()).toBe(0);
   expect(errors).toEqual([]);

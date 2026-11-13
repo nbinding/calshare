@@ -18,7 +18,7 @@ export async function expectNoSidewaysScroll(page) {
   if (vp) expect(await page.evaluate(() => innerWidth)).toBe(vp.width);
 }
 
-export const day = iso => `.cell[data-day="${iso}"]`;
+export const day = iso => `.nb-cell[data-day="${iso}"]`;
 
 // A fresh visit opens straight on the calendar.
 export async function startPlan(page) {
@@ -40,7 +40,7 @@ export async function createLink(page, { name = 'Sam', title = '', group = false
 
 // Open one day's sheet (time, maybe, remove). Right-click is the desktop form of holding a day.
 export async function openDaySheet(page, iso) {
-  await page.click(`.cell[data-day="${iso}"]`, { button: 'right' });
+  await page.click(`.nb-cell[data-day="${iso}"]`, { button: 'right' });
   await expect(page.locator('.sheet')).toBeVisible();
   return page.locator('.sheet');
 }

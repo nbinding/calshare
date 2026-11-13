@@ -20,25 +20,25 @@ test('display settings apply, persist and keep the calendar intact', async ({ pa
   await expect(trigger).toBeFocused();
 
   const root = page.locator('html');
-  await expect(root).toHaveAttribute('data-font', 'dyslexic');
+  await expect(root).toHaveAttribute('data-nb-font', 'dyslexic');
   await expect(root).toHaveAttribute('data-theme', 'dark');
-  await expect(root).toHaveAttribute('data-date-help', 'true');
+  await expect(root).toHaveAttribute('data-nb-date-help', 'true');
   expect(await page.evaluate(() => document.fonts.load('16px OpenDyslexic').then(f => f.length > 0))).toBe(true);
 
   await page.click(day('2026-11-20'));
-  await expect(page.locator(day('2026-11-13') + ' .wd')).toHaveText('Today');
+  await expect(page.locator(day('2026-11-13') + ' .nb-cell__wd')).toHaveText('Today');
   await expectNoSidewaysScroll(page);
-  const spilling = await page.$$eval('.cell span, .weekdays span, .month-head h3', els =>
+  const spilling = await page.$$eval('.nb-cell span, .nb-cal__weekdays span, .nb-cal__month', els =>
     els.filter(e => e.offsetParent && (e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > innerWidth)).length);
   expect(spilling).toBe(0);
 
   await page.reload();
-  await expect(root).toHaveAttribute('data-font', 'dyslexic');
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--text-scale').trim())).toBe('1.5');
+  await expect(root).toHaveAttribute('data-nb-font', 'dyslexic');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--nb-text-scale').trim())).toBe('1.5');
 
   await page.getByRole('button', { name: 'Display and accessibility settings' }).click();
   await page.getByRole('button', { name: 'Reset display settings' }).click();
-  await expect(root).toHaveAttribute('data-font', 'default');
+  await expect(root).toHaveAttribute('data-nb-font', 'default');
   expect(errors).toEqual([]);
 });
 
@@ -46,7 +46,7 @@ test('skip link moves focus to the main content', async ({ page }) => {
   await freshPage(page);
   await page.goto('/');
   await page.keyboard.press('Tab');
-  await expect(page.locator('.skip-link')).toBeFocused();
+  await expect(page.locator('.nb-skip')).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('main#main')).toBeFocused();
 });
