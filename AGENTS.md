@@ -18,7 +18,7 @@ Guidance for AI coding agents (Claude Code, Codex and others) working in this re
 
 | File | Role |
 |---|---|
-| `src/core.js` | Pure logic with no DOM: dates (UTC calendar dates), day masks (`FREE` plus `MORNING`, `AFTERNOON`, `EVENING` bits), `cycle` (calendar taps), `setTime` (per-day buttons), `meet`/`overlap`, hex day encoding, `toWire`/`fromWire`, messages, `.ics`. Put logic here so it can be unit tested. |
+| `src/core.js` | Pure logic with no DOM: dates (UTC calendar dates), day masks (`FREE` plus `MORNING`, `AFTERNOON`, `EVENING` and `MAYBE` bits, one base-32 digit per day in links), `cycle` (calendar taps), `setTime` (per-day buttons), `meet`/`overlap`, hex day encoding, `toWire`/`fromWire`, messages, `.ics`. Put logic here so it can be unit tested. |
 | `src/share.js` | `seal`/`open` (gzip, PBKDF2, AES-GCM, base64url) and `suggestPassphrase` (3 words). |
 | `src/app.js` | A single state object `S`, `render()` rebuilds `#app` from template strings, and events are delegated through `data-act` attributes. Display preferences go in `sessionStorage`, plans in `localStorage`. |
 | `src/style.css` | Design tokens on `:root` (light) with dark overrides through `prefers-color-scheme` and `data-theme`. Accessibility settings are applied with `html[data-*]` attributes. |

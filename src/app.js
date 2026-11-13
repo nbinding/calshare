@@ -1,6 +1,6 @@
 import { seal, open, WrongPassphrase, suggestPassphrase } from './share.js';
 import {
-  FREE, TAGS, MAX_MONTHS, cycle, setTime, meet, overlap, isFree, tagsOf, tagWords,
+  FREE, TAGS, MAX_MONTHS, cycle, setTime, meet, overlap, isFree, tagsOf, tagWords, isMaybe, setMaybe, timeWords,
   todayIso, monthOf, addMonths, rangeMonths, rangeDays, daysInMonth, weekdayIndex, parseIso,
   toWire, fromWire, turnAfter, isStale, formatDay, formatMonth, draftMessage, finalSummary, icsFor,
   decodeDays, encodeDays, shortCode, labelPeople, groupDays, dayNote,
@@ -203,25 +203,26 @@ function calendar({ mine = {}, theirs = {}, allowed = null, picked = [], mode = 
     let label = formatDay(iso), pressed = null, disabled = past || readonly;
     let tagMask = m;
     if (mode === 'edit') {
-      if (isFree(m)) cls.push('mine');
+      if (isFree(m)) cls.push(isMaybe(m) ? 'mine-maybe' : 'mine');
       if (isFree(t)) cls.push('theirs');
       if (both) cls.push('both');
       pressed = isFree(m);
       if (!isFree(m)) tagMask = t;
-      label += isFree(m) ? `, you're free ${tagWords(m)}` : ', not marked';
-      if (isFree(t)) label += `, they're free ${tagWords(t)}`;
+      label += isFree(m) ? `, you're free ${timeWords(m)}` : ', not marked';
+      if (isFree(t)) label += `, they're free ${timeWords(t)}`;
     } else {
       const ok = allowed && allowed[iso];
       tagMask = ok || 0;
       if (ok) cls.push('allowed'); else disabled = true;
       if (picked.includes(iso)) { cls.push('mine'); pressed = true; } else if (ok) pressed = false;
-      if (ok) label += counts ? `, ${counts[iso].replace('/', ' of ')} can make it, ${tagWords(ok)}` : `, both free ${tagWords(ok)}`;
+      if (ok) label += counts ? `, ${counts[iso].replace('/', ' of ')} can make it, ${timeWords(ok)}` : `, both free ${timeWords(ok)}`;
       if (mode === 'view') disabled = true;
     }
     if (past) cls.push('past');
     if (iso === today) cls.push('today');
+    const unsure = isMaybe(tagMask);
     const tags = counts?.[iso] || (tagsOf(tagMask) ? TAGS.filter(x => tagMask & x.bit).map(x => x.label[0]).join('') : '');
-    cells.push(`<button class="${cls.join(' ')}" data-act="day" data-day="${iso}" data-focus="day-${iso}" ${disabled ? 'disabled' : ''} ${pressed != null ? `aria-pressed="${pressed}"` : ''} aria-label="${h(label)}"><span class="wd" aria-hidden="true">${iso === today ? 'Today' : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekdayIndex(iso)]}</span><span class="num">${d}</span>${tags ? `<span class="tags">${tags}</span>` : ''}</button>`);
+    cells.push(`<button class="${cls.join(' ')}" data-act="day" data-day="${iso}" data-focus="day-${iso}" ${disabled ? 'disabled' : ''} ${pressed != null ? `aria-pressed="${pressed}"` : ''} aria-label="${h(label)}"><span class="wd" aria-hidden="true">${iso === today ? 'Today' : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekdayIndex(iso)]}</span><span class="num">${d}</span>${tags ? `<span class="tags">${tags}</span>` : ''}${unsure ? '<span class="q" aria-hidden="true">?</span>' : ''}</button>`);
   }
   return `<div class="calendar">
     ${tabs}
@@ -239,8 +240,8 @@ const HINT_KEY = 'calshare-hint-marking';
 function hintDismissed() { try { return localStorage.getItem(HINT_KEY) === 'done'; } catch { return false; } }
 
 // A small picture of a day square, used in the marking guide.
-const mini = (n, { on = false, tags = '' } = {}) =>
-  `<span class="mini-cell${on ? ' on' : ''}" aria-hidden="true"><span>${n}</span>${tags ? `<small>${tags}</small>` : ''}</span>`;
+const mini = (n, { on = false, tags = '', maybe = false } = {}) =>
+  `<span class="mini-cell${on ? ' on' : ''}${maybe ? ' maybe' : ''}" aria-hidden="true"><span>${n}</span>${tags ? `<small>${tags}</small>` : ''}${maybe ? '<i>?</i>' : ''}</span>`;
 const arrow = '<span class="mini-arrow" aria-hidden="true">→</span>';
 
 function markingGuide() {
@@ -253,6 +254,8 @@ function markingGuide() {
         <p><strong>Keep tapping a day to change its time:</strong> once for all day, twice for morning, three times for afternoon, four for evening. A fifth tap clears it.</p></li>
       <li><div class="hint-pic">${chips('M')}</div>
         <p><strong>Need more than one time on a day?</strong> Use "Your days" under the calendar: each day has its own buttons, so it can be morning and evening (ME).</p></li>
+      <li><div class="hint-pic">${mini(14, { on: true })}${mini(15, { maybe: true })}</div>
+        <p><strong>Not sure yet?</strong> Choose <em>Maybe</em> for that day in "Your days". It shows with a dotted outline and a ?, and still counts as a possible match.</p></li>
     </ol>
     <p class="small hint-key"><strong>M</strong> morning · <strong>A</strong> afternoon · <strong>E</strong> evening · no letter means any time</p>
     <button class="secondary hint-done" data-act="hint-done">Got it</button>
@@ -266,12 +269,16 @@ function dayTimes(mine, theirs = null, theirName = '') {
   const opts = [{ bit: 0, label: 'Any time' }, ...TAGS];
   return `<div class="day-times"><h3>Your days <span class="small">· set a time for each</span></h3><ul>${days.map(iso => {
     const m = mine[iso], short = formatDay(iso, { weekday: 'short', day: 'numeric', month: 'short' });
-    const t = theirs && theirs[iso] ? `<small>${h(theirName)}: ${h(tagWords(theirs[iso]))}</small>` : '';
+    const t = theirs && theirs[iso] ? `<small>${h(theirName)}: ${h(timeWords(theirs[iso]))}</small>` : '';
     return `<li><div class="dt-head"><strong>${h(short)}</strong>${t}<button class="dt-remove" data-act="remove-day" data-day="${iso}" aria-label="Remove ${h(formatDay(iso))}">${icon.close}</button></div>
       <div class="dt-chips" role="group" aria-label="Time on ${h(formatDay(iso))}">${opts.map(o => {
         const on = o.bit ? !!(m & o.bit) : !tagsOf(m);
         return `<button data-act="time" data-day="${iso}" data-bit="${o.bit}" data-focus="time-${iso}-${o.bit}" aria-pressed="${on}">${o.label}</button>`;
-      }).join('')}</div></li>`;
+      }).join('')}</div>
+      <div class="dt-sure" role="group" aria-label="How sure on ${h(formatDay(iso))}">
+        <button data-act="sure" data-day="${iso}" data-maybe="0" data-focus="sure-${iso}-0" aria-pressed="${!isMaybe(m)}">Free</button>
+        <button data-act="sure" data-day="${iso}" data-maybe="1" data-focus="sure-${iso}-1" aria-pressed="${isMaybe(m)}"><span class="q-mini" aria-hidden="true">?</span>Maybe</button>
+      </div></li>`;
   }).join('')}</ul></div>`;
 }
 
@@ -282,6 +289,7 @@ function quickActions() {
 function legend(withTheirs, theirName) {
   return `<ul class="legend" aria-label="Key">
     <li><span class="swatch mine"></span>You're free</li>
+    <li><span class="swatch maybe">?</span>Maybe, not confirmed</li>
     ${withTheirs ? `<li><span class="swatch theirs"></span>${h(theirName)} is free</li><li><span class="swatch both"></span>Both free</li>` : ''}
     <li><span class="swatch tagkey">MAE</span>Morning, afternoon, evening</li>
   </ul>`;
@@ -293,7 +301,7 @@ function dayList(days, { picked = null, radio = false, name = 'day', act = null 
   return `<ul class="day-list">${list.map(iso => {
     const on = picked?.includes(iso);
     const control = picked ? `<input type="${radio ? 'radio' : 'checkbox'}" name="${name}" data-act="${act || (radio ? 'choose' : 'toggle-pick')}" data-day="${iso}" ${on ? 'checked' : ''}>` : '';
-    return `<li><label class="${picked ? 'choice' : ''} ${on ? 'selected' : ''}">${control}<span><strong>${h(formatDay(iso))}</strong><small>${h(tagWords(days[iso]))}</small></span></label></li>`;
+    return `<li><label class="${picked ? 'choice' : ''} ${on ? 'selected' : ''}">${control}<span><strong>${h(formatDay(iso))}</strong><small>${h(timeWords(days[iso]))}</small></span></label></li>`;
   }).join('')}</ul>`;
 }
 
@@ -507,8 +515,8 @@ function viewCollect() {
   const list = `<ul class="day-list">${Object.keys(days).sort().map(iso => {
     const on = p.picks.includes(iso), g = days[iso];
     return `<li><label class="choice ${on ? 'selected' : ''}"><input type="checkbox" data-act="toggle-pick" data-day="${iso}" ${on ? 'checked' : ''}><span><strong>${h(formatDay(iso))}</strong>
-      <small>${g.free.length + 1} of ${people.length + 1} can make it${tagsOf(g.mask) ? ` · ${h(tagWords(g.mask))}` : ''}</small>
-      <small class="who">${h([nameOf(p, 'a', 'You') + ' (you)', ...g.free.map(id => labels[id])].join(', '))}</small></span></label></li>`;
+      <small>${g.free.length + 1} of ${people.length + 1} can make it${g.maybe.length + (isMaybe(p.a.days[iso]) ? 1 : 0) ? ` (${g.maybe.length + (isMaybe(p.a.days[iso]) ? 1 : 0)} maybe)` : ''}${tagsOf(g.mask) ? ` · ${h(tagWords(g.mask))}` : ''}</small>
+      <small class="who">${h([nameOf(p, 'a', 'You') + ' (you)' + (isMaybe(p.a.days[iso]) ? '?' : ''), ...g.free.map(id => labels[id] + (g.maybe.includes(id) ? '?' : ''))].join(', '))}</small></span></label></li>`;
   }).join('')}</ul>`;
   return `<main class="page">${head}
     <h1>${plural(people.length, 'person')} ${people.length === 1 ? 'has' : 'have'} <em>replied.</em></h1>
@@ -827,6 +835,7 @@ $app.addEventListener('click', e => {
     case 'new': startNew(); break;
     case 'time': { const d = myDays(), iso = el.dataset.day; d[iso] = setTime(d[iso] || FREE, Number(el.dataset.bit)); focusKey = el.dataset.focus; render(); break; }
     case 'remove-day': delete myDays()[el.dataset.day]; render(); break;
+    case 'sure': { const d = myDays(), iso = el.dataset.day; d[iso] = setMaybe(d[iso] || FREE, el.dataset.maybe === '1'); focusKey = el.dataset.focus; render(); break; }
     case 'hint-done': try { localStorage.setItem(HINT_KEY, 'done'); } catch {} focusKey = null; set({ showHint: false }); document.querySelector('[data-act=hint-open]')?.focus(); break;
     case 'hint-open': set({ showHint: true }); document.querySelector('.hint-done')?.focus(); break;
     case 'count': p.count = Number(el.dataset.c); trimToRange(); set({ monthIdx: Math.min(S.monthIdx, p.count - 1) }); break;

@@ -117,7 +117,7 @@ test('group plans: labels, counts and final summary', () => {
 
   const org = { '2026-11-20': F, '2026-11-21': F | M, '2026-11-23': F };
   const g = C.groupDays(org, people);
-  assert.deepEqual(g['2026-11-20'], { mask: F | M, free: ['aaaa1111', 'bbbb2222'] });
+  assert.deepEqual(g['2026-11-20'], { mask: F | M, free: ['aaaa1111', 'bbbb2222'], maybe: [] });
   assert.equal(g['2026-11-21'], undefined); // organiser morning vs Sam evening
   assert.equal(g['2026-11-23'], undefined); // nobody else free
 
@@ -139,4 +139,50 @@ test('update messages say to use the new link', () => {
   assert.doesNotMatch(C.draftMessage(plan, 'L', { update: true }), /separate message/);
   const reply = { ...plan, step: 2, b: { name: 'Alex', days: { '2026-11-20': 1 } } };
   assert.match(C.draftMessage(reply, 'L', { update: true }), /^I've updated my days for Dinner\. Use this link instead of my earlier one\. We overlap on 1 day\./);
+});
+
+test('maybe days: possible but not confirmed', () => {
+  const { FREE: F, MORNING: M, EVENING: E, MAYBE: Q } = C;
+  assert.equal(C.isMaybe(F | Q), true);
+  assert.equal(C.isMaybe(Q), false);                 // not free → not a maybe either
+  assert.equal(C.setMaybe(F | E, true), F | E | Q);
+  assert.equal(C.setMaybe(F | E | Q, false), F | E);
+  assert.equal(C.setMaybe(0, true), 0);
+  // the tap cycle changes the time and keeps the maybe
+  assert.equal(C.cycle(F | Q), F | M | Q);
+  assert.equal(C.cycle(F | E | Q), 0);
+  // per-day time buttons keep the maybe too
+  assert.equal(C.setTime(F | M | Q, 0), F | Q);
+  assert.equal(C.setTime(F | M | Q, M), F | Q);
+  // a match is a maybe if either side is
+  assert.equal(C.meet(F | Q, F | E), F | E | Q);
+  assert.equal(C.meet(F | M | Q, F | E), 0);
+  assert.equal(C.timeWords(F | E | Q), 'evening (maybe)');
+  assert.equal(C.timeWords(F), 'any time');
+});
+
+test('maybe days survive the link and old hex links read the same', () => {
+  const { FREE: F, EVENING: E, MAYBE: Q } = C;
+  const days = { '2026-11-02': F | Q, '2026-11-03': F | E | Q, '2026-11-04': F | E };
+  const s = C.encodeDays(days, '2026-11', 1);
+  assert.equal(s, '0hp9');
+  assert.deepEqual(C.decodeDays(s, '2026-11', 1), days);
+  // a link made before maybe existed: hex digits mean the same in base 32
+  assert.deepEqual(C.decodeDays('019f', '2026-11', 1), { '2026-11-02': 1, '2026-11-03': 9, '2026-11-04': 15 });
+  assert.throws(() => C.decodeDays('0w', '2026-11', 1));
+});
+
+test('maybe shows in messages, group counts and summaries', () => {
+  const { FREE: F, MAYBE: Q } = C;
+  const reply = { id: 'x', step: 2, created: 1, title: '', start: '2026-11', count: 1,
+    a: { name: 'Sam', days: { '2026-11-20': F, '2026-11-21': F } }, b: { name: 'Alex', days: { '2026-11-20': F | Q, '2026-11-21': F } }, picks: [] };
+  assert.match(C.draftMessage(reply, 'L'), /We overlap on 2 days \(1 is a maybe\)\./);
+  const people = [{ name: 'Jo', id: 'jjjj1111', days: { '2026-11-20': F | Q } }, { name: 'Lee', id: 'llll2222', days: { '2026-11-20': F } }];
+  const g = C.groupDays({ '2026-11-20': F }, people)['2026-11-20'];
+  assert.deepEqual(g.maybe, ['jjjj1111']);
+  const final = { id: 'g', step: 4, created: 1, title: 'Hike', start: '2026-11', count: 1, group: true,
+    a: { name: 'Nat', days: { '2026-11-20': F }, v: 0 }, picks: [], finals: ['2026-11-20'], people };
+  assert.match(C.finalSummary(final), /3 of 3 can make it \(1 maybe\)/);
+  const one = { ...reply, step: 4, finals: ['2026-11-20'] };
+  assert.match(C.finalSummary(one), /\(still a maybe\)/);
 });
