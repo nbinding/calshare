@@ -1,9 +1,9 @@
 // Pure logic for Calshare: dates, day masks, compact encoding, overlaps and messages.
 // No DOM access here, so it runs in Node for tests.
 
-// A day's mask: 0 = not free. Bit 0 = free. Bits 1-3 = optional time-of-day tags.
+// A day's mask: 0 = not free. Bit 0 = free. Bits 1-3 = optional time-of-day tags. Bit 4 = maybe (possible, not confirmed).
 // Free with no tags means "any time".
-export const FREE = 1, MORNING = 2, AFTERNOON = 4, EVENING = 8;
+export const FREE = 1, MORNING = 2, AFTERNOON = 4, EVENING = 8, MAYBE = 16;
 export const TAG_BITS = MORNING | AFTERNOON | EVENING;
 export const TAGS = [
   { bit: MORNING, key: 'morning', label: 'Morning', short: 'AM' },
@@ -41,6 +41,8 @@ export function weekdayIndex(iso) { return (parseIso(iso).getUTCDay() + 6) % 7; 
 // ---- Day masks ----
 export const isFree = m => (m & FREE) === FREE;
 export const tagsOf = m => m & TAG_BITS;
+export const isMaybe = m => isFree(m) && (m & MAYBE) === MAYBE;
+export const setMaybe = (m, on) => (isFree(m) ? (on ? m | MAYBE : m & ~MAYBE) : m);
 
 // Tap a day with the current brush. "any" toggles the whole day; a tag toggles that tag.
 export function paint(mask, brush) {
@@ -54,25 +56,27 @@ export function paint(mask, brush) {
 // A day with a combination of times (set with the per-day buttons) is past the end of the cycle, so it clears.
 export const CYCLE = [0, FREE, FREE | MORNING, FREE | AFTERNOON, FREE | EVENING];
 export function cycle(mask) {
-  const i = CYCLE.indexOf(mask);
-  return i < 0 ? 0 : CYCLE[(i + 1) % CYCLE.length];
+  const i = CYCLE.indexOf(mask & ~MAYBE); // a maybe day cycles its time and stays a maybe
+  const next = i < 0 ? 0 : CYCLE[(i + 1) % CYCLE.length];
+  return next ? next | (mask & MAYBE) : 0;
 }
 
 // Set a free day's time from its own buttons: 0 = any time; a tag toggles, and removing the last tag means any time.
 export function setTime(mask, bit) {
-  if (!bit) return FREE;
+  const maybe = mask & MAYBE;
+  if (!bit) return FREE | maybe;
   const next = (mask | FREE) ^ bit;
-  return tagsOf(next) ? next : FREE;
+  return (tagsOf(next) ? next : FREE | maybe);
 }
 
-// Two masks meet when both are free and their times are compatible.
+// Two masks meet when both are free and their times are compatible. The match is a maybe if either side is.
 export function meet(a, b) {
   if (!isFree(a) || !isFree(b)) return 0;
-  const ta = tagsOf(a), tb = tagsOf(b);
-  if (!ta) return FREE | tb;
-  if (!tb) return FREE | ta;
+  const ta = tagsOf(a), tb = tagsOf(b), maybe = (a | b) & MAYBE;
+  if (!ta) return FREE | tb | maybe;
+  if (!tb) return FREE | ta | maybe;
   const both = ta & tb;
-  return both ? FREE | both : 0;
+  return both ? FREE | both | maybe : 0;
 }
 
 export function overlap(daysA, daysB) {
@@ -81,6 +85,9 @@ export function overlap(daysA, daysB) {
   return out;
 }
 
+// "evening", or "evening (maybe)" for a day that's possible but not confirmed.
+export const timeWords = mask => tagWords(mask) + (isMaybe(mask) ? ' (maybe)' : '');
+
 export function tagWords(mask) {
   const t = tagsOf(mask);
   if (!t) return 'any time';
@@ -88,16 +95,17 @@ export function tagWords(mask) {
   return words.length > 1 ? words.slice(0, -1).join(', ') + ' or ' + words.at(-1) : words[0];
 }
 
-// ---- Compact encoding: one hex digit per day across the range, trailing zeros trimmed ----
+// ---- Compact encoding: one base-32 digit per day across the range, trailing zeros trimmed ----
+// Links from before "maybe" used hex digits (0-f), which mean the same values in base 32, so they still decode.
 export function encodeDays(days, start, count) {
   let s = '';
-  for (const iso of rangeDays(start, count)) s += (days[iso] || 0).toString(16);
+  for (const iso of rangeDays(start, count)) s += (days[iso] || 0).toString(32);
   return s.replace(/0+$/, '');
 }
 export function decodeDays(str, start, count) {
   const days = {}, all = rangeDays(start, count);
-  if (typeof str !== 'string' || !/^[0-9a-f]*$/.test(str)) throw new Error('bad days');
-  for (let i = 0; i < str.length && i < all.length; i++) { const m = parseInt(str[i], 16); if (isFree(m)) days[all[i]] = m; }
+  if (typeof str !== 'string' || !/^[0-9a-v]*$/.test(str)) throw new Error('bad days');
+  for (let i = 0; i < str.length && i < all.length; i++) { const m = parseInt(str[i], 32); if (isFree(m)) days[all[i]] = m; }
   return days;
 }
 
@@ -179,7 +187,7 @@ export function groupDays(aDays, people) {
     if (!free.length) continue;
     let mask = aDays[iso];
     for (const p of free) { const m = meet(mask, p.days[iso]); if (m) mask = m; }
-    out[iso] = { mask, free: free.map(p => p.id) };
+    out[iso] = { mask, free: free.map(p => p.id), maybe: free.filter(p => isMaybe(p.days[iso])).map(p => p.id) };
   }
   return out;
 }
@@ -208,10 +216,11 @@ export function draftMessage(plan, link, { update = false } = {}) {
       if (plan.group) return `Hi all! Can we find a day${about(plan)}? I've marked the days I'm free here. Open the link, add your days and send it back to me:\n${link}\n${passNote}`;
       return `Hi${B ? ' ' + B : ''}! Can we find a day${about(plan)}? I've marked the days I'm free here. Add yours and send the link back:\n${link}\n${passNote}`;
     case 2: {
-      const n = Object.keys(overlap(plan.a.days, plan.b.days)).length;
+      const both = overlap(plan.a.days, plan.b.days), n = Object.keys(both).length, m = Object.values(both).filter(isMaybe).length;
       const lead = update ? `I've updated my days${about(plan)}. Use this link instead of my earlier one.` : `Here are my days${about(plan)}.`;
-      if (plan.group) return `${lead} ${n ? `I can do ${n} of your days.` : `I can't do any of your days, sorry.`}\n${link}`;
-      return `${lead} ${n ? `We overlap on ${n} day${n === 1 ? '' : 's'}.` : `It doesn't look like we overlap yet.`} Pick the ones that suit you:\n${link}`;
+      const maybeNote = m ? ` (${m} ${m === 1 ? 'is a maybe' : 'are maybes'})` : '';
+      if (plan.group) return `${lead} ${n ? `I can do ${n} of your days${maybeNote}.` : `I can't do any of your days, sorry.`}\n${link}`;
+      return `${lead} ${n ? `We overlap on ${n} day${n === 1 ? '' : 's'}${maybeNote}.` : `It doesn't look like we overlap yet.`} Pick the ones that suit you:\n${link}`;
     }
     case 3: {
       const list = plan.picks.map(shortDay).join(', ');
@@ -227,11 +236,13 @@ const joinNames = names => (names.length > 1 ? names.slice(0, -1).join(', ') + '
 function dayInfo(plan, iso) {
   if (!plan.group) return { mask: meet(plan.a.days[iso] || 0, plan.b?.days[iso] || 0) };
   const g = groupDays({ [iso]: plan.a.days[iso] || FREE }, plan.people || [])[iso];
-  return { mask: g?.mask || plan.a.days[iso] || FREE, going: (g?.free.length || 0) + 1, of: (plan.people || []).length + 1 };
+  const maybes = (g?.maybe.length || 0) + (isMaybe(plan.a.days[iso]) ? 1 : 0);
+  return { mask: g?.mask || plan.a.days[iso] || FREE, going: (g?.free.length || 0) + 1, of: (plan.people || []).length + 1, maybes };
 }
 export function dayNote(plan, iso) {
-  const { mask, going, of } = dayInfo(plan, iso);
-  return [tagsOf(mask) ? tagWords(mask) : '', going ? `${going} of ${of} can make it` : ''].filter(Boolean).join(', ');
+  const { mask, going, of, maybes } = dayInfo(plan, iso);
+  const count = going ? `${going} of ${of} can make it${maybes ? ` (${maybes} maybe)` : ''}` : '';
+  return [tagsOf(mask) ? tagWords(mask) : '', count, !going && isMaybe(mask) ? 'still a maybe' : ''].filter(Boolean).join(', ');
 }
 const longDay = iso => formatDay(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
